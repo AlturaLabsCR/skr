@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: GPL-2.0
+---
+BasedOnStyle: LLVM
+UseTab: ForIndentation
+IndentWidth: 8
+TabWidth: 8
+ContinuationIndentWidth: 8
+ColumnLimit: 80
+AlignConsecutiveDeclarations: AcrossComments
+AlignTrailingComments: true
+SpacesBeforeTrailingComments: 1
+PointerAlignment: Left
+SpaceBeforeParens: ControlStatements
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterStruct: false
+  AfterEnum: false
+  AfterFunction: false
+  AfterControlStatement: false
+SortIncludes: true
+ReflowComments: true
+...

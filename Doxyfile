@@ -1,0 +1,15 @@
+PROJECT_NAME           = "SKR"
+PROJECT_BRIEF          = "Single-header 3D graphics engine"
+OUTPUT_DIRECTORY       = docs
+
+INPUT                  = include skr
+FILE_PATTERNS          = *.h *.c
+RECURSIVE              = YES
+
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+GENERATE_MAN           = NO
+GENERATE_RTF           = NO
+
+QUIET                  = NO
+EXTRACT_ALL            = YES
