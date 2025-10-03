@@ -383,7 +383,7 @@ typedef struct SkrMesh {
  * across meshes.
  */
 typedef struct SkrModel {
-	SkrTexture* Textures; /*!< Array of textures used by model’s meshes. */
+	SkrTexture* Textures; /*!< Array of textures used by model's meshes. */
 	SkrMesh*    Meshes;   /*!< Array of meshes that compose the model. */
 	char*       Path;     /*!< Filesystem path of the model file. */
 } SkrModel;
@@ -402,7 +402,7 @@ typedef struct SkrModel {
  * @param channels Output pointer to receive the number of color channels.
  *
  * @return Pointer to raw pixel data (heap-allocated). The exact format (e.g.
- *         RGB vs. RGBA) is determined by the user’s implementation. Returns
+ *         RGB vs. RGBA) is determined by the user's implementation. Returns
  *         NULL if the image could not be loaded.
  *
  * @note The returned memory must be freed with ::skr_free_image.
