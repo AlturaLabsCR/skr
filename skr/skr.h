@@ -24,9 +24,13 @@
 #ifndef SKR_H
 #define SKR_H
 
+#ifndef __gl_h_
 #include <GL/glew.h>
+#endif
+
 #include <GLFW/glfw3.h>
 #include <cglm/cglm.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -56,47 +60,11 @@ extern "C" {
  * If the buffer is empty (first character == '\0'),
  * then no error is currently set.
  *
- * @see SKR_LAST_ERROR_CLEAR
- * @see SKR_LAST_ERROR_SET
+ * @see m_skr_last_error_clear
+ * @see m_skr_last_error_set
  * @see SKR_OK
  */
 static char SKR_LAST_ERROR[SKR_LAST_ERROR_SIZE];
-
-/**
- * @internal
- * @brief Clears the global error buffer.
- *
- * Sets the first character of `SKR_LAST_ERROR` to '\0', effectively removing
- * any previously stored error message.
- *
- * @usage
- * SKR_LAST_ERROR_CLEAR();
- */
-#define SKR_LAST_ERROR_CLEAR() (SKR_LAST_ERROR[0] = '\0')
-
-/**
- * @internal
- * @brief Sets the global error message.
- *
- * Formats and writes a message into `SKR_LAST_ERROR` using `snprintf()`
- * semantics. Any previous error is overwritten.
- *
- * @param fmt Format string (like printf).
- * @param ... Optional arguments for the format string.
- *
- * @details
- * This macro stores the last error encountered by the application in a global
- * buffer of size `SKR_LAST_ERROR_SIZE`. It is safe and bounded by the buffer
- * size.
- *
- * @usage
- * if (!init_graphics()) {
- *     SKR_LAST_ERROR_SET("Graphics init failed: %s", reason);
- *     return false;
- * }
- */
-#define SKR_LAST_ERROR_SET(fmt, ...)                                           \
-	snprintf(SKR_LAST_ERROR, SKR_LAST_ERROR_SIZE, fmt, ##__VA_ARGS__)
 
 /**
  * @brief Checks if there is no error set.
@@ -211,21 +179,21 @@ typedef struct SkrVertex {
 	 *
 	 * Three-component vector (x, y, z).
 	 */
-	float Position[3];
+	vec3 Position;
 
 	/**
 	 * @brief Vertex normal vector.
 	 *
 	 * Used for lighting calculations. Three components (x, y, z).
 	 */
-	float Normal[3];
+	vec3 Normal;
 
 	/**
 	 * @brief Texture coordinates (UV).
 	 *
 	 * Two-component vector (u, v), typically in the range [0, 1].
 	 */
-	float UV[2];
+	vec2 UV;
 
 	/**
 	 * @brief Tangent vector.
@@ -233,7 +201,7 @@ typedef struct SkrVertex {
 	 * Defines the direction of increasing U in the tangent space.
 	 * Used for normal mapping. Three components (x, y, z).
 	 */
-	float Tangent[3];
+	vec3 Tangent;
 
 	/**
 	 * @brief Bitangent vector.
@@ -242,7 +210,7 @@ typedef struct SkrVertex {
 	 * Orthogonal to both the normal and tangent. Three components (x, y,
 	 * z).
 	 */
-	float Bitangent[3];
+	vec3 Bitangent;
 
 	/**
 	 * @brief Indices of influencing bones.
@@ -390,6 +358,36 @@ typedef struct SkrModel {
 
 /**
  * @internal
+ * @brief Set the last error message.
+ *
+ * Formats a string with printf-style arguments and stores it into the global
+ * error buffer `SKR_LAST_ERROR`. This allows subsequent functions to retrieve a
+ * human-readable description of the most recent failure.
+ *
+ * @param fmt Format string
+ * @param ... Arguments corresponding to the format specifiers in `fmt`.
+ */
+static inline void m_skr_last_error_set(const char* fmt, ...) {
+	va_list args;
+	va_start(args, fmt);
+	vsnprintf(SKR_LAST_ERROR, SKR_LAST_ERROR_SIZE, fmt, args);
+	va_end(args);
+}
+
+/**
+ * @internal
+ * @brief Clears the global error buffer.
+ *
+ * Sets the first character of `SKR_LAST_ERROR` to '\0', effectively removing
+ * any previously stored error message.
+ *
+ * @usage
+ * m_skr_last_error_clear();
+ */
+static inline void m_skr_last_error_clear() { SKR_LAST_ERROR[0] = '\0'; }
+
+/**
+ * @internal
  * @brief Load an image from a file into raw pixel memory.
  *
  * This function **must be implemented by the user** of the engine. The engine
@@ -435,7 +433,7 @@ extern void m_skr_free_image(unsigned char* image_data);
 static inline char* m_skr_read_file(const char* path) {
 	FILE* file = fopen(path, "rb");
 	if (!file) {
-		SKR_LAST_ERROR_SET("failed to open");
+		m_skr_last_error_set("failed to open");
 		return NULL;
 	}
 
@@ -446,7 +444,7 @@ static inline char* m_skr_read_file(const char* path) {
 	char* buffer = (char*)malloc(len + 1);
 	if (!buffer) {
 		fclose(file);
-		SKR_LAST_ERROR_SET("failed to open");
+		m_skr_last_error_set("failed to open");
 		return NULL;
 	}
 
@@ -454,7 +452,7 @@ static inline char* m_skr_read_file(const char* path) {
 	buffer[len] = '\0';
 	fclose(file);
 
-	SKR_LAST_ERROR_CLEAR();
+	m_skr_last_error_clear();
 	return buffer;
 }
 
@@ -470,7 +468,7 @@ static inline char* m_skr_read_file(const char* path) {
 static inline void m_skr_gl_framebuffer_size_callback(const int width,
                                                       const int height) {
 	glViewport(0, 0, width, height);
-	SKR_LAST_ERROR_CLEAR();
+	m_skr_last_error_clear();
 }
 
 /**
@@ -485,7 +483,7 @@ static inline void m_skr_gl_glfw_framebuffer_size_callback(GLFWwindow* window,
                                                            const int   width,
                                                            const int   height) {
 	m_skr_gl_framebuffer_size_callback(width, height);
-	SKR_LAST_ERROR_CLEAR();
+	m_skr_last_error_clear();
 }
 
 /**
@@ -497,7 +495,8 @@ static inline void m_skr_gl_glfw_framebuffer_size_callback(GLFWwindow* window,
  */
 static inline int m_skr_gl_glfw_init(SkrWindow* w) {
 	if (!glfwInit() || !w) {
-		SKR_LAST_ERROR_SET("either glfwInit != 1 or SkrWindow == NULL");
+		m_skr_last_error_set(
+		        "either glfwInit != 1 or SkrWindow == NULL");
 		return 0;
 	}
 
@@ -514,7 +513,7 @@ static inline int m_skr_gl_glfw_init(SkrWindow* w) {
 	        glfwCreateWindow(w->Width, w->Height, w->Title, NULL, NULL);
 
 	if (!w->Backend.Handler.GLFW) {
-		SKR_LAST_ERROR_SET("window backend is NULL");
+		m_skr_last_error_set("window backend is NULL");
 		glfwTerminate();
 		return 0;
 	}
@@ -523,7 +522,7 @@ static inline int m_skr_gl_glfw_init(SkrWindow* w) {
 	                               m_skr_gl_glfw_framebuffer_size_callback);
 	glfwMakeContextCurrent(w->Backend.Handler.GLFW);
 
-	SKR_LAST_ERROR_CLEAR();
+	m_skr_last_error_clear();
 	return 1;
 }
 
@@ -546,8 +545,8 @@ static inline int m_skr_gl_check_compile_errors(const GLuint shader,
 		if (!success) {
 			glGetProgramInfoLog(shader, sizeof(infoLog), NULL,
 			                    infoLog);
-			SKR_LAST_ERROR_SET("failed to link %s: %s", type,
-			                   infoLog);
+			m_skr_last_error_set("failed to link %s: %s", type,
+			                     infoLog);
 			return 0;
 		}
 	} else {
@@ -555,8 +554,8 @@ static inline int m_skr_gl_check_compile_errors(const GLuint shader,
 		if (!success) {
 			glGetShaderInfoLog(shader, sizeof(infoLog), NULL,
 			                   infoLog);
-			SKR_LAST_ERROR_SET("failed to compile %s: %s", type,
-			                   infoLog);
+			m_skr_last_error_set("failed to compile %s: %s", type,
+			                     infoLog);
 			return 0;
 		}
 	}
@@ -590,15 +589,6 @@ static inline GLuint m_skr_gl_create_shader(const GLenum type,
 	case GL_GEOMETRY_SHADER:
 		type_str = "geom";
 		break;
-	case GL_COMPUTE_SHADER:
-		type_str = "comp";
-		break;
-	case GL_TESS_CONTROL_SHADER:
-		type_str = "tesc";
-		break;
-	case GL_TESS_EVALUATION_SHADER:
-		type_str = "tese";
-		break;
 	default:
 		type_str = "unknown";
 		break;
@@ -609,7 +599,7 @@ static inline GLuint m_skr_gl_create_shader(const GLenum type,
 		return 0;
 	}
 
-	SKR_LAST_ERROR_CLEAR();
+	m_skr_last_error_clear();
 	return shader;
 }
 
@@ -634,7 +624,7 @@ static inline GLuint m_skr_gl_create_shader_from_file(const GLenum type,
 	GLuint shader = m_skr_gl_create_shader(type, source);
 	free(source);
 
-	SKR_LAST_ERROR_CLEAR();
+	m_skr_last_error_clear();
 	return shader;
 }
 
@@ -667,7 +657,7 @@ static inline GLuint m_skr_gl_create_program(const GLuint* shaders,
 		glDeleteShader(shaders[i]);
 	}
 
-	SKR_LAST_ERROR_CLEAR();
+	m_skr_last_error_clear();
 	return program;
 }
 
@@ -684,13 +674,13 @@ static inline GLuint
 m_skr_gl_create_program_from_shaders(const SkrShader* shaders_input,
                                      const size_t     count) {
 	if (!shaders_input || count == 0) {
-		SKR_LAST_ERROR_SET("either shaders_input != 1 or count == 0");
+		m_skr_last_error_set("either shaders_input != 1 or count == 0");
 		return 0;
 	}
 
 	GLuint* shaders = (GLuint*)malloc(sizeof(GLuint) * count);
 	if (!shaders) {
-		SKR_LAST_ERROR_SET("shaders_input == NULL");
+		m_skr_last_error_set("shaders_input == NULL");
 		return 0;
 	}
 
@@ -708,7 +698,7 @@ m_skr_gl_create_program_from_shaders(const SkrShader* shaders_input,
 				glDeleteShader(shaders[j]);
 			}
 			free(shaders);
-			SKR_LAST_ERROR_SET(
+			m_skr_last_error_set(
 			        "shader.Source and shader.Path are NULL");
 			return 0;
 		}
@@ -731,7 +721,7 @@ m_skr_gl_create_program_from_shaders(const SkrShader* shaders_input,
 		return 0;
 	}
 
-	SKR_LAST_ERROR_CLEAR();
+	m_skr_last_error_clear();
 	return program;
 }
 
@@ -741,7 +731,7 @@ m_skr_gl_create_program_from_shaders(const SkrShader* shaders_input,
  */
 static inline void m_skr_gl_shader_use(const GLuint program) {
 	glUseProgram(program);
-	SKR_LAST_ERROR_CLEAR();
+	m_skr_last_error_clear();
 }
 
 /**
@@ -754,48 +744,48 @@ static inline void m_skr_gl_shader_destroy(GLuint* program) {
 	if (program && *program) {
 		glDeleteProgram(*program);
 		*program = 0;
-		SKR_LAST_ERROR_CLEAR();
+		m_skr_last_error_clear();
 	}
 }
 
 static inline void m_skr_gl_shader_set_bool(const GLuint program,
                                             const char* name, const int value) {
 	glUniform1i(glGetUniformLocation(program, name), value);
-	SKR_LAST_ERROR_CLEAR();
+	m_skr_last_error_clear();
 }
 
 static inline void m_skr_gl_shader_set_int(const GLuint program,
                                            const char* name, const int value) {
 	glUniform1i(glGetUniformLocation(program, name), value);
-	SKR_LAST_ERROR_CLEAR();
+	m_skr_last_error_clear();
 }
 
 static inline void m_skr_gl_shader_set_float(const GLuint program,
                                              const char*  name,
                                              const float  value) {
 	glUniform1f(glGetUniformLocation(program, name), value);
-	SKR_LAST_ERROR_CLEAR();
+	m_skr_last_error_clear();
 }
 
 static inline void m_skr_gl_shader_set_vec2(const GLuint program,
                                             const char*  name,
                                             const vec2   value) {
 	glUniform2fv(glGetUniformLocation(program, name), 1, value);
-	SKR_LAST_ERROR_CLEAR();
+	m_skr_last_error_clear();
 }
 
 static inline void m_skr_gl_shader_set_vec3(const GLuint program,
                                             const char*  name,
                                             const vec3   value) {
 	glUniform3fv(glGetUniformLocation(program, name), 1, value);
-	SKR_LAST_ERROR_CLEAR();
+	m_skr_last_error_clear();
 }
 
 static inline void m_skr_gl_shader_set_vec4(const GLuint program,
                                             const char*  name,
                                             const vec4   value) {
 	glUniform4fv(glGetUniformLocation(program, name), 1, value);
-	SKR_LAST_ERROR_CLEAR();
+	m_skr_last_error_clear();
 }
 
 static inline void m_skr_gl_shader_set_mat2(const GLuint program,
@@ -803,7 +793,7 @@ static inline void m_skr_gl_shader_set_mat2(const GLuint program,
                                             const mat2   value) {
 	glUniformMatrix2fv(glGetUniformLocation(program, name), 1, GL_FALSE,
 	                   (const float*)value);
-	SKR_LAST_ERROR_CLEAR();
+	m_skr_last_error_clear();
 }
 
 static inline void m_skr_gl_shader_set_mat3(const GLuint program,
@@ -811,7 +801,7 @@ static inline void m_skr_gl_shader_set_mat3(const GLuint program,
                                             const mat3   value) {
 	glUniformMatrix3fv(glGetUniformLocation(program, name), 1, GL_FALSE,
 	                   (const float*)value);
-	SKR_LAST_ERROR_CLEAR();
+	m_skr_last_error_clear();
 }
 
 static inline void m_skr_gl_shader_set_mat4(const GLuint program,
@@ -819,7 +809,7 @@ static inline void m_skr_gl_shader_set_mat4(const GLuint program,
                                             const mat4   value) {
 	glUniformMatrix4fv(glGetUniformLocation(program, name), 1, GL_FALSE,
 	                   (const float*)value);
-	SKR_LAST_ERROR_CLEAR();
+	m_skr_last_error_clear();
 }
 
 static inline void m_skr_gl_renderer_init() {}
@@ -905,7 +895,7 @@ static inline int m_skr_gl_load_texture_2d_from_path(const char*   path,
 	unsigned char* data =
 	        m_skr_load_image_from_file(path, &width, &height, &nrChannels);
 	if (!data) {
-		SKR_LAST_ERROR_SET("failed to load texture");
+		m_skr_last_error_set("failed to load texture");
 		return 0;
 	}
 
@@ -923,7 +913,7 @@ static inline int m_skr_gl_load_texture_2d_from_path(const char*   path,
 
 	m_skr_free_image(data);
 
-	SKR_LAST_ERROR_CLEAR();
+	m_skr_last_error_clear();
 	return 1;
 }
 
@@ -941,7 +931,7 @@ static inline int m_skr_gl_load_textures_2d_from_paths(const char**  paths,
 		}
 	}
 
-	SKR_LAST_ERROR_CLEAR();
+	m_skr_last_error_clear();
 	return 1;
 }
 
@@ -953,7 +943,7 @@ static inline void m_skr_free_textures_2d(unsigned int* textures,
                                           const int     count) {
 	if (count > 0 && textures) {
 		glDeleteTextures(count, textures);
-		SKR_LAST_ERROR_CLEAR();
+		m_skr_last_error_clear();
 	}
 }
 
