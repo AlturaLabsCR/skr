@@ -74,11 +74,11 @@ static char SKR_LAST_ERROR[SKR_LAST_ERROR_SIZE];
  * @return int 1 if no error, 0 if an error exists.
  *
  * @usage
- * if (!SKR_OK()) {
+ * if (!SKR_OK) {
  *     fprintf(stderr, "Error: %s\n", SKR_LAST_ERROR);
  * }
  */
-#define SKR_OK() (SKR_LAST_ERROR[0] == '\0')
+#define SKR_OK (SKR_LAST_ERROR[0] == '\0')
 
 /**
  * @brief Maximum number of bone influences per vertex.
