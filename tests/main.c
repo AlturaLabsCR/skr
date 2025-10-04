@@ -1,8 +1,11 @@
 #include <stdio.h>
 
-#include "skr.h"
-
 #include <GL/glew.h>
+#include <GLFW/glfw3.h>
+
+#define SKR_BACKEND_API 0    // using opengl
+#define SKR_BACKEND_WINDOW 0 // using glfw
+#include "../skr/skr.h"
 
 int main(void) {
 	SkrWindow window = {
@@ -11,23 +14,21 @@ int main(void) {
 	        .Height = 600,
 	};
 
-	if (!m_skr_gl_glfw_init(&window)) {
-		fprintf(stderr, "Failed to init GLFW: %s\n", SKR_LAST_ERROR);
+	SkrState state = SkrInit(&window);
+	if (!SKR_OK) {
+		fprintf(stderr, "Failed to init window: %s\n", SKR_LAST_ERROR);
 		return 1;
 	}
 
-	// Initialize GLEW after creating context
 	if (glewInit() != GLEW_OK) {
 		fprintf(stderr, "Failed to init GLEW\n");
 		return 1;
 	}
 
-	while (!m_skr_gl_glfw_should_close(&window)) {
-		m_skr_gl_renderer_render();
-		glfwSwapBuffers(window.Backend.Handler.GLFW);
-		glfwPollEvents();
+	while (!SkrWindowShouldClose(&window)) {
+		SkrRendererRender(&state);
 	}
 
-	glfwTerminate();
+	SkrFinalize(&state);
 	return 0;
 }

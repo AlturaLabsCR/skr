@@ -24,12 +24,82 @@
 #ifndef SKR_H
 #define SKR_H
 
+/**
+ * @brief Identifies the type of graphics API backend in use.
+ */
+typedef enum SkrApiBackendType {
+	SKR_BACKEND_API_GL, /*!< OpenGL API. */
+	SKR_BACKEND_API_VK, /*!< Vulkan API. */
+} SkrApiBackendType;
+
+/*
+ * You can control which graphics API SKR uses by defining
+ * SKR_BACKEND_API before including skr.h.
+ *
+ * #define SKR_BACKEND_API 0 -> Use OpenGL backend, must include manually
+ * #define SKR_BACKEND_API 1 -> Use Vulkan backend, must include manually
+ *
+ * If SKR_BACKEND_API is not defined, skr.h will automatically try to include
+ * both GL/glew.h and <vulkan/vulkan.h>, and will default to OpenGL.
+ */
+
+#ifndef SKR_BACKEND_API
+
+// Try including GLEW
 #ifndef __gl_h_
 #include <GL/glew.h>
 #endif
 
+// Try including Vulkan
+#ifndef VULKAN_H_
+#include <vulkan/vulkan.h>
+#endif
+
+// Default API if none was specified: GL
+#define SKR_BACKEND_API SKR_BACKEND_API_GL
+
+#endif
+
+/**
+ * @brief Identifies the type of window backend in use.
+ */
+typedef enum SkrWindowBackendType {
+	SKR_BACKEND_WINDOW_GLFW, /*!< Window created using GLFW. */
+	SKR_BACKEND_WINDOW_SDL,  /*!< Window created using SDL. */
+} SkrWindowBackendType;
+
+/*
+ * You can control which windowing backend SKR uses by defining
+ * SKR_BACKEND_WINDOW before including skr.h.
+ *
+ * #define SKR_BACKEND_WINDOW 0 -> Use GLFW backend, must include manually
+ * #define SKR_BACKEND_WINDOW 1 -> Use SDL backend, must include manually
+ *
+ * If SKR_BACKEND_WINDOW is not defined, skr.h will automatically try to include
+ * both GLFW/glfw3.h and SDL2/SDL.h, and will default to GLFW.
+ */
+
+#ifndef SKR_BACKEND_WINDOW
+
+// Try including GLFW
+#ifndef _glfw3_h_
 #include <GLFW/glfw3.h>
+#endif
+
+// Try including SDL
+#ifndef SDL_h_
+#include <SDL2/SDL.h>
+#endif
+
+// Default backend if none was specified: GLFW
+#define SKR_BACKEND_WINDOW SKR_BACKEND_WINDOW_GLFW
+
+#endif
+
+#ifndef cglm_h
 #include <cglm/cglm.h>
+#endif
+
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -88,52 +158,6 @@ static char SKR_LAST_ERROR[SKR_LAST_ERROR_SIZE];
  * balance flexibility with performance by limiting to four weights per vertex.
  */
 #define MAX_BONE_INFLUENCE 4
-
-/**
- * @brief Identifies the type of window backend in use.
- */
-typedef enum SkrWindowBackendType {
-	SkrGLFW, /*!< Window created using GLFW. */
-	SkrSDL   /*!< Window created using SDL. */
-} SkrWindowBackendType;
-
-/**
- * @brief Tagged union that wraps a backend window handle.
- *
- * Contains both the backend type (`Tag`) and the backend-specific handle
- * (`Handler`). Only the member corresponding to the active backend type is
- * valid.
- */
-typedef struct SkrWindowBackend {
-	const SkrWindowBackendType Type; /*!< Backend type. */
-
-	union {
-		struct GLFWwindow* GLFW; /*!< Handle to a GLFW window. */
-		                         /* TODO: more backends */
-	} Handler;                       /*!< Backend-specific handle. */
-} SkrWindowBackend;
-
-struct SkrWindow;
-
-/**
- * @brief Function type for input event callbacks.
- */
-typedef void SkrInputHandler(struct SkrWindow* w);
-
-/**
- * @brief Generic engine window.
- *
- * A portable window structure that abstracts over different windowing backends.
- * Encapsulates title, size, optional input handler, and backend data.
- */
-typedef struct SkrWindow {
-	char* Title;  /*!< Window title (UTF-8 string). */
-	int   Width;  /*!< Width of the window in pixels. */
-	int   Height; /*!< Height of the window in pixels. */
-
-	SkrInputHandler* InputHandler; /*!< Pointer to input handler. */
-	SkrWindowBackend Backend;      /*!< Backend type and handle. */
-} SkrWindow;
 
 /**
  * @brief Shader object definition.
@@ -325,7 +349,8 @@ typedef struct SkrMesh {
 	 * Pointer to an array of @ref SkrVertex structs stored on the CPU.
 	 * Uploaded to GPU via the VBO. May be freed after upload if not needed.
 	 */
-	SkrVertex* Vertices;
+	SkrVertex*   Vertices;
+	unsigned int VertexCount;
 
 	/**
 	 * @brief Index data count.
@@ -340,7 +365,8 @@ typedef struct SkrMesh {
 	 * Pointer to an array of @ref SkrTexture objects that define the
 	 * materials of this mesh.
 	 */
-	SkrTexture* Textures;
+	SkrTexture*  Textures;
+	unsigned int TextureCount;
 } SkrMesh;
 
 /**
@@ -351,28 +377,106 @@ typedef struct SkrMesh {
  * across meshes.
  */
 typedef struct SkrModel {
-	SkrTexture* Textures; /*!< Array of textures used by model's meshes. */
-	SkrMesh*    Meshes;   /*!< Array of meshes that compose the model. */
-	char*       Path;     /*!< Filesystem path of the model file. */
+	SkrMesh*     Meshes; /*!< Array of meshes that compose the model. */
+	unsigned int MeshCount;
+
+	SkrTexture*  Textures; /*!< Array of textures used by model's meshes. */
+	unsigned int TextureCount;
+
+	char* Path; /*!< Filesystem path of the model file. */
 } SkrModel;
 
 /**
+ * @brief Tagged union that wraps a backend window handle.
+ *
+ * Contains both the backend type (`Tag`) and the backend-specific handle
+ * (`Handler`). Only the member corresponding to the active backend type is
+ * valid.
+ */
+typedef struct SkrWindowBackend {
+	const SkrWindowBackendType Type; /*!< Backend type. */
+
+	union {
+		struct GLFWwindow* GLFW; /*!< Handle to a GLFW window. */
+		                         /* TODO: more backends */
+	} Handler;                       /*!< Backend-specific handle. */
+} SkrWindowBackend;
+
+struct SkrWindow;
+
+/**
+ * @brief Function type for input event callbacks.
+ */
+typedef void SkrInputHandler(struct SkrWindow* w);
+
+/**
+ * @brief Generic engine window.
+ *
+ * A portable window structure that abstracts over different windowing backends.
+ * Encapsulates title, size, optional input handler, and backend data.
+ */
+typedef struct SkrWindow {
+	char* Title;  /*!< Window title (UTF-8 string). */
+	int   Width;  /*!< Width of the window in pixels. */
+	int   Height; /*!< Height of the window in pixels. */
+
+	SkrInputHandler* InputHandler; /*!< Pointer to input handler. */
+	SkrWindowBackend Backend;      /*!< Backend type and handle. */
+} SkrWindow;
+
+typedef struct SkrState {
+	SkrWindow* Window;
+
+	SkrModel*    Models;
+	unsigned int ModelCount;
+} SkrState;
+
+/**
  * @internal
- * @brief Set the last error message.
+ * @brief Set the last error message with source metadata.
  *
  * Formats a string with printf-style arguments and stores it into the global
- * error buffer `SKR_LAST_ERROR`. This allows subsequent functions to retrieve a
- * human-readable description of the most recent failure.
+ * error buffer 'SKR_LAST_ERROR'. The message will typically be set through the
+ * @ref SKR_LAST_ERROR_SET macro, which automatically includes the file, line,
+ * and function name where the error occurred.
  *
- * @param fmt Format string
- * @param ... Arguments corresponding to the format specifiers in `fmt`.
+ * @param file  Source file where the error occurred (use __FILE__).
+ * @param line  Line number where the error occurred (use __LINE__).
+ * @param func  Function name where the error occurred (use __func__).
+ * @param fmt   Format string (printf-style).
+ * @param ...   Arguments corresponding to the format specifiers in `fmt`.
  */
-static inline void m_skr_last_error_set(const char* fmt, ...) {
+static inline void m_skr_last_error_set_with_meta(const char* file, int line,
+                                                  const char* func,
+                                                  const char* fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
-	vsnprintf(SKR_LAST_ERROR, SKR_LAST_ERROR_SIZE, fmt, args);
+
+	int written = snprintf(SKR_LAST_ERROR, SKR_LAST_ERROR_SIZE,
+	                       "[SKR] ERROR %s:%d:%s: ", file, line, func);
+
+	if (written < 0 || written >= SKR_LAST_ERROR_SIZE)
+		written = 0;
+
+	vsnprintf(SKR_LAST_ERROR + written, SKR_LAST_ERROR_SIZE - written, fmt,
+	          args);
+
 	va_end(args);
 }
+
+/**
+ * @brief Set the last error message with automatic source metadata.
+ *
+ * Use this macro instead of calling 'm_skr_last_error_set_with_meta()'
+ * directly. It automatically includes the source file, line number, and
+ * function name in the error message prefix.
+ *
+ * @usage
+ * m_skr_last_error_set("Failed to load texture: %s", path);
+ */
+#define m_skr_last_error_set(...)                                              \
+	m_skr_last_error_set_with_meta(__FILE__, __LINE__, __func__,           \
+	                               __VA_ARGS__)
 
 /**
  * @internal
@@ -828,10 +932,28 @@ static inline void m_skr_gl_renderer_render(void) {
  *
  * Usually called at shutdown, not per-frame.
  */
-static inline void m_skr_gl_renderer_finalize(SkrMesh* m) {
-	glDeleteVertexArrays(1, &m->VAO);
-	glDeleteBuffers(1, &m->VBO);
-	glDeleteBuffers(1, &m->EBO);
+static inline void m_skr_gl_renderer_finalize(SkrState* s) {
+	if (!s)
+		return;
+
+	for (unsigned int i = 0; i < s->ModelCount; ++i) {
+		SkrModel* model = &s->Models[i];
+		if (!model->Meshes)
+			continue;
+
+		for (unsigned int j = 0; j < model->MeshCount; ++j) {
+			SkrMesh* mesh = &model->Meshes[j];
+
+			if (mesh->VAO)
+				glDeleteVertexArrays(1, &mesh->VAO);
+			if (mesh->VBO)
+				glDeleteBuffers(1, &mesh->VBO);
+			if (mesh->EBO)
+				glDeleteBuffers(1, &mesh->EBO);
+
+			mesh->VAO = mesh->VBO = mesh->EBO = 0;
+		}
+	}
 }
 
 /**
@@ -848,25 +970,27 @@ static inline int m_skr_gl_glfw_should_close(SkrWindow* w) {
  *
  * Calls input handler, polls events, renders, swaps buffers.
  */
-static inline void m_skr_gl_glfw_renderer_render(SkrWindow* w, SkrMesh* m) {
-	if (w->InputHandler) {
-		w->InputHandler(w);
+static inline void m_skr_gl_glfw_renderer_render(SkrState* s) {
+	if (s->Window->InputHandler) {
+		s->Window->InputHandler(s->Window);
 	}
 
 	glfwPollEvents();
-	glfwGetFramebufferSize(w->Backend.Handler.GLFW, &w->Width, &w->Height);
+
+	glfwGetFramebufferSize(s->Window->Backend.Handler.GLFW,
+	                       &s->Window->Width, &s->Window->Height);
 
 	m_skr_gl_renderer_render();
 
-	glfwSwapBuffers(w->Backend.Handler.GLFW);
+	glfwSwapBuffers(s->Window->Backend.Handler.GLFW);
 }
 
 /**
  * @internal
  * @brief GLFW Shutdown OpenGL renderer and GLFW.
  */
-static inline void m_skr_gl_glfw_renderer_finalize(SkrMesh* m) {
-	m_skr_gl_renderer_finalize(m);
+static inline void m_skr_gl_glfw_renderer_finalize(SkrState* s) {
+	m_skr_gl_renderer_finalize(s);
 
 	glfwTerminate();
 }
@@ -944,6 +1068,52 @@ static inline void m_skr_free_textures_2d(unsigned int* textures,
 	if (count > 0 && textures) {
 		glDeleteTextures(count, textures);
 		m_skr_last_error_clear();
+	}
+}
+
+static inline int SkrWindowInit(SkrWindow* w) {
+	if (SKR_BACKEND_API == SKR_BACKEND_API_GL) {
+		if (SKR_BACKEND_WINDOW == SKR_BACKEND_WINDOW_GLFW) {
+			if (!m_skr_gl_glfw_init(w)) {
+				return 0;
+			}
+		}
+	}
+
+	return 1;
+}
+
+static inline SkrState SkrInit(SkrWindow* w) {
+	SkrState s = {0};
+
+	if (!SkrWindowInit(w))
+		return (SkrState){0};
+
+	s.Window = w;
+	return s;
+}
+
+static inline int SkrWindowShouldClose(SkrWindow* w) {
+	if (SKR_BACKEND_WINDOW == SKR_BACKEND_WINDOW_GLFW) {
+		return m_skr_gl_glfw_should_close(w);
+	}
+
+	return 0;
+}
+
+static inline void SkrRendererRender(SkrState* s) {
+	if (SKR_BACKEND_API == SKR_BACKEND_API_GL) {
+		if (SKR_BACKEND_WINDOW == SKR_BACKEND_WINDOW_GLFW) {
+			m_skr_gl_glfw_renderer_render(s);
+		}
+	}
+}
+
+static inline void SkrFinalize(SkrState* s) {
+	if (SKR_BACKEND_API == SKR_BACKEND_API_GL) {
+		if (SKR_BACKEND_WINDOW == SKR_BACKEND_WINDOW_GLFW) {
+			m_skr_gl_glfw_renderer_finalize(s);
+		}
 	}
 }
 
