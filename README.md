@@ -4,6 +4,6 @@ Single-header 3D graphics engine
 
 ## Dependencies
 
-- An GL loader
-- A window backend (glfw, sdl)
+- Graphics API (GL loader and/or VK spec)
+- Window backend (glfw and/or sdl)
 - cglm

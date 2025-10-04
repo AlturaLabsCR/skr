@@ -45,17 +45,17 @@ typedef enum SkrApiBackendType {
 
 #ifndef SKR_BACKEND_API
 
-// Try including GLEW
+/* Try including GLEW */
 #ifndef __gl_h_
 #include <GL/glew.h>
 #endif
 
-// Try including Vulkan
+/* Try including Vulkan */
 #ifndef VULKAN_H_
 #include <vulkan/vulkan.h>
 #endif
 
-// Default API if none was specified: GL
+/* Default API if none was specified: GL */
 #define SKR_BACKEND_API SKR_BACKEND_API_GL
 
 #endif
@@ -81,17 +81,17 @@ typedef enum SkrWindowBackendType {
 
 #ifndef SKR_BACKEND_WINDOW
 
-// Try including GLFW
+/* Try including GLFW */
 #ifndef _glfw3_h_
 #include <GLFW/glfw3.h>
 #endif
 
-// Try including SDL
+/* Try including SDL */
 #ifndef SDL_h_
 #include <SDL2/SDL.h>
 #endif
 
-// Default backend if none was specified: GLFW
+/* Default backend if none was specified: GLFW */
 #define SKR_BACKEND_WINDOW SKR_BACKEND_WINDOW_GLFW
 
 #endif
@@ -1121,4 +1121,4 @@ static inline void SkrFinalize(SkrState* s) {
 }
 #endif
 
-#endif // SKR_H
+#endif /* SKR_H */
