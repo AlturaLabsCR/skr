@@ -24,6 +24,15 @@
 #ifndef SKR_H
 #define SKR_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 /**
  * @brief Identifies the type of graphics API backend in use.
  */
@@ -98,15 +107,6 @@ typedef enum SkrWindowBackendType {
 
 #ifndef cglm_h
 #include <cglm/cglm.h>
-#endif
-
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-#ifdef __cplusplus
-extern "C" {
 #endif
 
 /**
