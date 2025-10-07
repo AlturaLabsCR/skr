@@ -11,5 +11,5 @@ GENERATE_LATEX         = NO
 GENERATE_MAN           = NO
 GENERATE_RTF           = NO
 
-QUIET                  = NO
+QUIET                  = YES
 EXTRACT_ALL            = YES
