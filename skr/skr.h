@@ -67,6 +67,13 @@ typedef enum SkrApiBackendType {
 /* Default API if none was specified: GL */
 #define SKR_BACKEND_API SKR_BACKEND_API_GL
 
+#else
+
+#if !defined(VULKAN_H_)
+typedef struct VkPipeline_T*       VkPipeline;
+typedef struct VkPipelineLayout_T* VkPipelineLayout;
+#endif
+
 #endif
 
 /**
@@ -189,6 +196,22 @@ typedef struct SkrShader {
 	 */
 	const char* Path;
 } SkrShader;
+
+static SkrShader skr_fps_camera_vert = {
+        GL_VERTEX_SHADER,
+        (char*){"#version 330 core\n"
+                "layout (location = 0) in vec3 aPos;\n"
+                "layout (location = 1) in vec2 aTexCoord;\n"
+                "out vec2 TexCoord;\n"
+                "uniform mat4 model;\n"
+                "uniform mat4 view;\n"
+                "uniform mat4 projection;\n"
+                "void main() {\n"
+                "gl_Position = projection * view * model * vec4(aPos, "
+                "1.0f);\n"
+                "TexCoord = vec2(aTexCoord.x, aTexCoord.y);\n"
+                "}\n"},
+        NULL};
 
 /**
  * @brief Vertex structure used by the rendering engine.
@@ -367,6 +390,24 @@ typedef struct SkrMesh {
 	 */
 	SkrTexture*  Textures;
 	unsigned int TextureCount;
+
+	/**
+	 * @brief Backend-specific rendering data.
+	 *
+	 * Tagged union that stores handles or objects specific to the graphics
+	 * API backend in use. Only the member corresponding to the current
+	 * backend type is valid.
+	 */
+	union {
+		struct {
+			GLuint Program;
+		} GL;
+
+		struct {
+			VkPipeline       Pipeline;
+			VkPipelineLayout Layout;
+		} VK;
+	} Backend;
 } SkrMesh;
 
 /**
@@ -424,12 +465,63 @@ typedef struct SkrWindow {
 	SkrWindowBackend Backend;      /*!< Backend type and handle. */
 } SkrWindow;
 
+typedef struct SkrShaderProgram {
+	GLuint       ID;
+	char*        Name;
+	SkrShader*   Shaders;
+	unsigned int ShaderCount;
+} SkrShaderProgram;
+
 typedef struct SkrState {
 	SkrWindow* Window;
 
 	SkrModel*    Models;
 	unsigned int ModelCount;
+
+	SkrShaderProgram* Programs;
+	unsigned int      ProgramCount;
 } SkrState;
+
+/**
+ * @brief First-person camera structure.
+ *
+ * Stores position, orientation, and field-of-view.
+ * Can be controlled by mouse and keyboard input.
+ */
+typedef struct SkrCamera {
+	vec3 Position; /*!< Camera position in world space. */
+	vec3 Front;    /*!< Normalized forward vector. */
+	vec3 Up;       /*!< Normalized up vector. */
+	vec3 Right;    /*!< Normalized right vector. */
+	vec3 WorldUp;  /*!< Global up direction, usually {0, 1, 0}. */
+
+	float Yaw;
+	float Pitch;
+	float FOV;
+
+	float Sensitivity;
+	float LastX;      /*!< Last cursor X position. */
+	float LastY;      /*!< Last cursor Y position. */
+	bool  FirstMouse; /*!< Whether the first mouse movement has been
+	                     captured. */
+	bool  Initialized;
+} SkrCamera;
+
+#define SkrDefaultFPSCamera                                                    \
+	(&(SkrCamera){                                                         \
+	        .Position = {0.0f, 0.0f, 3.0f},                                \
+	        .Front = {0.0f, 0.0f, -1.0f},                                  \
+	        .Up = {0.0f, 1.0f, 0.0f},                                      \
+	        .Yaw = -90.0f,                                                 \
+	        .Pitch = 0.0f,                                                 \
+	        .FOV = 70.0f,                                                  \
+	        .Sensitivity = 0.1f,                                           \
+	        .LastX = 400.0f,                                               \
+	        .LastY = 300.0f,                                               \
+	        .FirstMouse = true,                                            \
+	})
+
+extern SkrCamera* g_skr_camera;
 
 /**
  * @internal
@@ -586,8 +678,52 @@ static inline void m_skr_gl_framebuffer_size_callback(const int width,
 static inline void m_skr_gl_glfw_framebuffer_size_callback(GLFWwindow* window,
                                                            const int   width,
                                                            const int   height) {
+	(void)window;
 	m_skr_gl_framebuffer_size_callback(width, height);
 	m_skr_last_error_clear();
+}
+
+static inline void m_skr_gl_glfw_mouse_callback(GLFWwindow* window,
+                                                double xposIn, double yposIn) {
+	float xpos = xposIn;
+	float ypos = yposIn;
+
+	if (g_skr_camera->FirstMouse) {
+		g_skr_camera->LastX = xpos;
+		g_skr_camera->LastY = ypos;
+		g_skr_camera->FirstMouse = false;
+	}
+
+	float xoffset = xpos - g_skr_camera->LastX;
+	float yoffset =
+	        g_skr_camera->LastY -
+	        ypos; // reversed since y-coordinates go from bottom to top
+	g_skr_camera->LastX = xpos;
+	g_skr_camera->LastY = ypos;
+
+	float sensitivity = g_skr_camera->Sensitivity;
+	xoffset *= sensitivity;
+	yoffset *= sensitivity;
+
+	g_skr_camera->Yaw += xoffset;
+	g_skr_camera->Pitch += yoffset;
+
+	// make sure that when pitch is out of bounds, screen doesn't get
+	// flipped
+	if (g_skr_camera->Pitch > 89.0f)
+		g_skr_camera->Pitch = 89.0f;
+	if (g_skr_camera->Pitch < -89.0f)
+		g_skr_camera->Pitch = -89.0f;
+
+	vec3 front = {0.0f, 0.0f, 0.0f};
+
+	front[0] = cosf(glm_rad(g_skr_camera->Yaw)) *
+	           cosf(glm_rad(g_skr_camera->Pitch));
+	front[1] = sinf(glm_rad(g_skr_camera->Pitch));
+	front[2] = sinf(glm_rad(g_skr_camera->Yaw)) *
+	           cosf(glm_rad(g_skr_camera->Pitch));
+
+	glm_vec3_normalize_to(front, g_skr_camera->Front);
 }
 
 /**
@@ -625,6 +761,11 @@ static inline int m_skr_gl_glfw_init(SkrWindow* w) {
 	glfwSetFramebufferSizeCallback(w->Backend.Handler.GLFW,
 	                               m_skr_gl_glfw_framebuffer_size_callback);
 	glfwMakeContextCurrent(w->Backend.Handler.GLFW);
+
+	if (g_skr_camera) {
+		glfwSetCursorPosCallback(w->Backend.Handler.GLFW,
+		                         m_skr_gl_glfw_mouse_callback);
+	}
 
 	m_skr_last_error_clear();
 	return 1;
@@ -922,8 +1063,27 @@ static inline void m_skr_gl_renderer_init() {}
  * @internal
  * @brief GL clear screen (color + depth).
  */
-static inline void m_skr_gl_renderer_render(void) {
+static inline void m_skr_gl_renderer_render(SkrState* s) {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	for (unsigned int i = 0; i < s->ModelCount; ++i) {
+		SkrModel* model = &s->Models[i];
+		if (!model->Meshes)
+			continue;
+
+		for (unsigned int j = 0; j < model->MeshCount; ++j) {
+			SkrMesh* mesh = &model->Meshes[j];
+
+			if (mesh->VAO == 0 || mesh->VertexCount == 0)
+				continue;
+
+			glUseProgram(mesh->Backend.GL.Program);
+			glBindVertexArray(mesh->VAO);
+			glDrawArrays(GL_TRIANGLES, 0, mesh->VertexCount);
+		}
+	}
+
+	glBindVertexArray(0);
 }
 
 /**
@@ -944,6 +1104,14 @@ static inline void m_skr_gl_renderer_finalize(SkrState* s) {
 		for (unsigned int j = 0; j < model->MeshCount; ++j) {
 			SkrMesh* mesh = &model->Meshes[j];
 
+			if (mesh->Textures && mesh->TextureCount > 0) {
+				for (unsigned int t = 0; t < mesh->TextureCount;
+				     ++t) {
+					glDeleteTextures(1,
+					                 &mesh->Textures[t].ID);
+				}
+			}
+
 			if (mesh->VAO)
 				glDeleteVertexArrays(1, &mesh->VAO);
 			if (mesh->VBO)
@@ -952,8 +1120,14 @@ static inline void m_skr_gl_renderer_finalize(SkrState* s) {
 				glDeleteBuffers(1, &mesh->EBO);
 
 			mesh->VAO = mesh->VBO = mesh->EBO = 0;
+			mesh->Backend.GL.Program = 0;
 		}
 	}
+
+	glBindVertexArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+	glUseProgram(0);
 }
 
 /**
@@ -975,24 +1149,14 @@ static inline void m_skr_gl_glfw_renderer_render(SkrState* s) {
 		s->Window->InputHandler(s->Window);
 	}
 
-	glfwPollEvents();
-
 	glfwGetFramebufferSize(s->Window->Backend.Handler.GLFW,
 	                       &s->Window->Width, &s->Window->Height);
 
-	m_skr_gl_renderer_render();
+	m_skr_gl_renderer_render(s);
 
 	glfwSwapBuffers(s->Window->Backend.Handler.GLFW);
-}
 
-/**
- * @internal
- * @brief GLFW Shutdown OpenGL renderer and GLFW.
- */
-static inline void m_skr_gl_glfw_renderer_finalize(SkrState* s) {
-	m_skr_gl_renderer_finalize(s);
-
-	glfwTerminate();
+	glfwPollEvents();
 }
 
 /**
@@ -1102,6 +1266,9 @@ static inline int SkrWindowShouldClose(SkrWindow* w) {
 }
 
 static inline void SkrRendererRender(SkrState* s) {
+	if (!s || !s->Window)
+		return;
+
 	if (SKR_BACKEND_API == SKR_BACKEND_API_GL) {
 		if (SKR_BACKEND_WINDOW == SKR_BACKEND_WINDOW_GLFW) {
 			m_skr_gl_glfw_renderer_render(s);
@@ -1111,9 +1278,89 @@ static inline void SkrRendererRender(SkrState* s) {
 
 static inline void SkrFinalize(SkrState* s) {
 	if (SKR_BACKEND_API == SKR_BACKEND_API_GL) {
-		if (SKR_BACKEND_WINDOW == SKR_BACKEND_WINDOW_GLFW) {
-			m_skr_gl_glfw_renderer_finalize(s);
+		m_skr_gl_renderer_finalize(s);
+
+		if (s->Window->Backend.Type == SKR_BACKEND_WINDOW_GLFW) {
+			glfwTerminate();
 		}
+	}
+
+	s->Models = NULL;
+	s->ModelCount = 0;
+	s->Window = NULL;
+}
+
+static inline GLuint m_skr_gl_triangle(SkrState* s) {
+	static SkrMesh  mesh = {0};
+	static SkrModel model = {0};
+
+	const char* triangle_vert = "#version 330 core\n"
+	                            "layout (location = 0) in vec3 aPos;\n"
+	                            "layout (location = 1) in vec3 aColor;\n"
+	                            "out vec3 ourColor;\n"
+	                            "void main() {\n"
+	                            "  gl_Position = vec4(aPos, 1.0);\n"
+	                            "  ourColor = aColor;\n"
+	                            "}\n";
+
+	const char* triangle_frag = "#version 330 core\n"
+	                            "out vec4 FragColor;\n"
+	                            "in vec3 ourColor;\n"
+	                            "void main() {\n"
+	                            "  FragColor = vec4(ourColor, 1.0f);\n"
+	                            "}\n";
+
+	SkrShader shaders[] = {
+	        {GL_VERTEX_SHADER, triangle_vert, NULL},
+	        {GL_FRAGMENT_SHADER, triangle_frag, NULL},
+	};
+
+	mesh.Backend.GL.Program =
+	        m_skr_gl_create_program_from_shaders(shaders, 2);
+	glUseProgram(mesh.Backend.GL.Program);
+
+	glGenVertexArrays(1, &mesh.VAO);
+	glGenBuffers(1, &mesh.VBO);
+	glBindVertexArray(mesh.VAO);
+	glBindBuffer(GL_ARRAY_BUFFER, mesh.VBO);
+
+	float vertices[] = {0.5f,  -0.5f, 0.0f, 1.0f, 0.0f, 0.0f,
+	                    -0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 0.0f,
+	                    0.0f,  0.5f,  0.0f, 0.0f, 0.0f, 1.0f};
+
+	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices,
+	             GL_STATIC_DRAW);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float),
+	                      (void*)0);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float),
+	                      (void*)(3 * sizeof(float)));
+	glEnableVertexAttribArray(1);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindVertexArray(0);
+
+	mesh.VertexCount = 3;
+	model.Meshes = &mesh;
+	model.MeshCount = 1;
+
+	s->Models = &model;
+	s->ModelCount = 1;
+
+	return mesh.Backend.GL.Program;
+}
+
+static inline void SkrTriangle(SkrState* s) {
+	if (SKR_BACKEND_API == SKR_BACKEND_API_GL) {
+		m_skr_gl_triangle(s);
+	}
+}
+
+static inline void SkrInitCamera(SkrState* s, SkrShader vert) {}
+
+static inline void SkrCaptureCursor(SkrState* s) {
+	if (s->Window->Backend.Type == SKR_BACKEND_WINDOW_GLFW) {
+		glfwSetInputMode(s->Window->Backend.Handler.GLFW, GLFW_CURSOR,
+		                 GLFW_CURSOR_DISABLED);
 	}
 }
 
