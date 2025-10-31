@@ -227,6 +227,8 @@ typedef struct SkrVertex {
 	 */
 	vec3 Position;
 
+	vec3 Color;
+
 	/**
 	 * @brief Vertex normal vector.
 	 *
@@ -378,6 +380,8 @@ typedef struct SkrMesh {
 	 */
 	unsigned int* Indices;
 	unsigned int  IndexCount;
+
+	SkrShaderProgram* Program;
 } SkrMesh;
 
 /**
@@ -986,9 +990,8 @@ static inline void m_skr_gl_shader_set_mat4(const GLuint program,
 	m_skr_last_error_clear();
 }
 
-static inline void m_skr_gl_renderer_init(void) {}
-
 static inline void m_skr_gl_renderer_render(SkrState* s) {
+
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	for (unsigned int i = 0; i < s->ModelCount; ++i) {
@@ -1002,13 +1005,11 @@ static inline void m_skr_gl_renderer_render(SkrState* s) {
 			if (mesh->VAO == 0 || mesh->VertexCount == 0)
 				continue;
 
-			// use shaders
+			glUseProgram(mesh->Program->Backend.GL.ID);
 			glBindVertexArray(mesh->VAO);
 			glDrawArrays(GL_TRIANGLES, 0, mesh->VertexCount);
 		}
 	}
-
-	glBindVertexArray(0);
 }
 
 static inline void m_skr_gl_renderer_finalize(SkrState* s) {
@@ -1184,11 +1185,66 @@ static inline int SkrWindowShouldClose(SkrWindow* w) {
 	return 0;
 }
 
+static inline void m_skr_gl_mesh_init(SkrMesh* m, SkrVertex* vertices,
+                                      size_t size) {
+	if (!vertices || size == 0) {
+		m_skr_last_error_set("missing vertices or size");
+		return;
+	}
+
+	glGenVertexArrays(1, &m->VAO);
+	glGenBuffers(1, &m->VBO);
+	glBindVertexArray(m->VAO);
+	glBindBuffer(GL_ARRAY_BUFFER, m->VBO);
+	glBufferData(GL_ARRAY_BUFFER, size, vertices, GL_STATIC_DRAW);
+	glEnableVertexAttribArray(0);
+
+	// position
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(SkrVertex),
+	                      (void*)0);
+
+	// color
+	glEnableVertexAttribArray(1);
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(SkrVertex),
+	                      (void*)offsetof(SkrVertex, Color));
+
+	// normal
+	glEnableVertexAttribArray(2);
+	glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(SkrVertex),
+	                      (void*)offsetof(SkrVertex, Normal));
+
+	// uv
+	glEnableVertexAttribArray(3);
+	glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(SkrVertex),
+	                      (void*)offsetof(SkrVertex, UV));
+
+	// glBindVertexArray(0);
+	// glUseProgram(m->Program->Backend.GL.ID);
+
+	m_skr_last_error_clear();
+}
+
+static inline void m_skr_gl_renderer_init(SkrState* s) {
+	glEnable(GL_DEPTH_TEST);
+
+	for (int i = 0; i < s->ModelCount; i++) {
+		SkrModel* model = &s->Models[i];
+		for (int j = 0; j < model->MeshCount; j++) {
+			SkrMesh* mesh = &model->Meshes[j];
+
+			m_skr_gl_mesh_init(mesh, mesh->Vertices,
+			                   mesh->VertexCount *
+			                           sizeof(SkrVertex));
+		}
+	}
+}
+
 static inline void SkrRendererInit(SkrState* s) {
 	if (!s)
 		return;
 
-	glEnable(GL_DEPTH_TEST);
+	if (s->Backend.GL)
+		m_skr_gl_renderer_init(s);
 }
 
 static inline void SkrRendererRender(SkrState* s) {
@@ -1217,24 +1273,23 @@ static inline void SkrFinalize(SkrState* s) {
 }
 
 static inline void m_skr_gl_triangle(SkrState* s) {
-	static SkrMesh  mesh = {0};
-	static SkrModel model = {0};
+	static const char* triangle_vert =
+	        "#version 330 core\n"
+	        "layout (location = 0) in vec3 aPos;\n"
+	        "layout (location = 1) in vec3 aColor;\n"
+	        "out vec3 ourColor;\n"
+	        "void main() {\n"
+	        "  gl_Position = vec4(aPos, 1.0);\n"
+	        "  ourColor = aColor;\n"
+	        "}\n";
 
-	const char* triangle_vert = "#version 330 core\n"
-	                            "layout (location = 0) in vec3 aPos;\n"
-	                            "layout (location = 1) in vec3 aColor;\n"
-	                            "out vec3 ourColor;\n"
-	                            "void main() {\n"
-	                            "  gl_Position = vec4(aPos, 1.0);\n"
-	                            "  ourColor = aColor;\n"
-	                            "}\n";
-
-	const char* triangle_frag = "#version 330 core\n"
-	                            "out vec4 FragColor;\n"
-	                            "in vec3 ourColor;\n"
-	                            "void main() {\n"
-	                            "  FragColor = vec4(ourColor, 1.0f);\n"
-	                            "}\n";
+	static const char* triangle_frag =
+	        "#version 330 core\n"
+	        "out vec4 FragColor;\n"
+	        "in vec3 ourColor;\n"
+	        "void main() {\n"
+	        "  FragColor = vec4(ourColor, 1.0f);\n"
+	        "}\n";
 
 	SkrShader shaders[] = {
 	        {GL_VERTEX_SHADER, triangle_vert, NULL},
@@ -1243,36 +1298,30 @@ static inline void m_skr_gl_triangle(SkrState* s) {
 
 	GLuint prog =
 	        m_skr_gl_create_program_from_shaders(shaders, sizeof(shaders));
-	glUseProgram(prog);
 
-	glGenVertexArrays(1, &mesh.VAO);
-	glGenBuffers(1, &mesh.VBO);
-	glBindVertexArray(mesh.VAO);
-	glBindBuffer(GL_ARRAY_BUFFER, mesh.VBO);
+	static const SkrVertex vertices[] = {
+	        {.Position = {0.5f, -0.5f, 0.0f}, .Color = {1.0f, 0.0f, 0.0f}},
+	        {.Position = {-0.5f, -0.5f, 0.0f}, .Color = {0.0f, 1.0f, 0.0f}},
+	        {.Position = {0.0f, 0.5f, 0.0f}, .Color = {0.0f, 0.0f, 1.0f}},
+	};
 
-	float vertices[] = {0.5f,  -0.5f, 0.0f, 1.0f, 0.0f, 0.0f,
-	                    -0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 0.0f,
-	                    0.0f,  0.5f,  0.0f, 0.0f, 0.0f, 1.0f};
+	static SkrMesh mesh = {
+	        .Vertices = (SkrVertex*)vertices,
+	        .VertexCount = 3,
+	        .Program = NULL,
+	};
 
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices,
-	             GL_STATIC_DRAW);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float),
-	                      (void*)0);
-	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float),
-	                      (void*)(3 * sizeof(float)));
-	glEnableVertexAttribArray(1);
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
-	glBindVertexArray(0);
+	static SkrShaderProgram program = {.Backend.GL.ID = 0};
+	program.Backend.GL.ID = prog;
+	mesh.Program = &program;
 
-	mesh.VertexCount = 3;
-	model.Meshes = &mesh;
-	model.MeshCount = 1;
+	static SkrModel model = {
+	        .Meshes = &mesh,
+	        .MeshCount = 1,
+	};
 
 	s->Models = &model;
 	s->ModelCount = 1;
-
-	return;
 }
 
 static inline void SkrTriangle(SkrState* s) {
@@ -1288,35 +1337,83 @@ static inline void SkrCaptureCursor(SkrState* s) {
 	}
 }
 
-static inline void m_skr_gl_mesh_init(SkrMesh* m, SkrVertex* vertices,
-                                      size_t size) {
-	if (!vertices || size == 0) {
-		m_skr_last_error_set("missing vertices or size");
-		return;
+/**
+ * @brief Append vertices to an existing mesh.
+ *
+ * @param mesh Pointer to the mesh to modify.
+ * @param vertices Pointer to the vertex array to append.
+ * @param count Number of vertices to append.
+ * @return int 0 on success, nonzero on allocation failure.
+ */
+static inline int m_skr_mesh_append_vertices(SkrMesh*         mesh,
+                                             const SkrVertex* vertices,
+                                             const int        count) {
+	if (!mesh || !vertices || count <= 0)
+		return 0;
+
+	int        new_count = mesh->VertexCount + count;
+	SkrVertex* new_vertices =
+	        realloc(mesh->Vertices, new_count * sizeof(SkrVertex));
+	if (!new_vertices) {
+		m_skr_last_error_set("failed to realloc mesh vertices");
+		return 0;
 	}
 
-	glGenVertexArrays(1, &m->VAO);
-	glGenBuffers(1, &m->VBO);
-	glBindVertexArray(m->VAO);
-	glBindBuffer(GL_ARRAY_BUFFER, m->VBO);
-	glBufferData(GL_ARRAY_BUFFER, size, vertices, GL_STATIC_DRAW);
-	glEnableVertexAttribArray(0);
+	memcpy(new_vertices + mesh->VertexCount, vertices,
+	       count * sizeof(SkrVertex));
 
-	// vertex position
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(SkrVertex),
-	                      (void*)0);
-	// vertex normals
-	glEnableVertexAttribArray(1);
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(SkrVertex),
-	                      (void*)offsetof(SkrVertex, Normal));
-	// vertex texture coords
-	glEnableVertexAttribArray(2);
-	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(SkrVertex),
-	                      (void*)offsetof(SkrVertex, UV));
+	mesh->Vertices = new_vertices;
+	mesh->VertexCount = new_count;
+	return 1;
+}
 
-	glBindVertexArray(0);
+/**
+ * @brief Append a mesh to an existing model.
+ *
+ * @param model Pointer to the model to modify.
+ * @param mesh Pointer to the mesh to append (copied by value).
+ * @return int 0 on success, nonzero on allocation failure.
+ */
+static inline int skr_model_append_mesh(SkrModel* model, const SkrMesh* mesh) {
+	if (!model || !mesh)
+		return 0;
 
-	m_skr_last_error_clear();
+	SkrMesh* new_meshes = realloc(model->Meshes,
+	                              (model->MeshCount + 1) * sizeof(SkrMesh));
+	if (!new_meshes) {
+		m_skr_last_error_set("failed to realloc model meshes");
+		return 0;
+	}
+
+	new_meshes[model->MeshCount] = *mesh; // shallow copy (VAO, VBO, etc.)
+	model->Meshes = new_meshes;
+	model->MeshCount += 1;
+	return 1;
+}
+
+/**
+ * @brief Append a model to the global rendering state.
+ *
+ * @param state Pointer to the engine state.
+ * @param model Pointer to the model to append (copied by value).
+ * @return int 0 on success, nonzero on allocation failure.
+ */
+static inline int skr_state_append_model(SkrState*       state,
+                                         const SkrModel* model) {
+	if (!state || !model)
+		return -1;
+
+	SkrModel* new_models = realloc(state->Models, (state->ModelCount + 1) *
+	                                                      sizeof(SkrModel));
+	if (!new_models) {
+		m_skr_last_error_set("failed to realloc state models");
+		return 0;
+	}
+
+	new_models[state->ModelCount] = *model;
+	state->Models = new_models;
+	state->ModelCount += 1;
+	return 1;
 }
 
 #ifdef __cplusplus
