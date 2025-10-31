@@ -222,61 +222,49 @@ typedef struct SkrShaderProgram {
 typedef struct SkrVertex {
 	/**
 	 * @brief Vertex position in object space.
-	 *
 	 * Three-component vector (x, y, z).
 	 */
-	vec3 Position;
-
-	vec3 Color;
+	vec3 Position; // layout (location = 0)
 
 	/**
 	 * @brief Vertex normal vector.
-	 *
 	 * Used for lighting calculations. Three components (x, y, z).
 	 */
-	vec3 Normal;
+	vec3 Normal; // layout (location = 1)
 
 	/**
 	 * @brief Texture coordinates (UV).
-	 *
 	 * Two-component vector (u, v), typically in the range [0, 1].
 	 */
-	vec2 UV;
+	vec2 UV; // layout (location = 2)
+
+	/**
+	 * @brief Vertex color.
+	 * Optional per-vertex color.
+	 */
+	vec3 Color; // layout (location = 3)
 
 	/**
 	 * @brief Tangent vector.
-	 *
-	 * Defines the direction of increasing U in the tangent space.
-	 * Used for normal mapping. Three components (x, y, z).
+	 * Defines the direction of increasing U in tangent space.
 	 */
-	vec3 Tangent;
+	vec3 Tangent; // layout (location = 4)
 
 	/**
 	 * @brief Bitangent vector.
-	 *
-	 * Defines the direction of increasing V in the tangent space.
-	 * Orthogonal to both the normal and tangent. Three components (x, y,
-	 * z).
+	 * Defines the direction of increasing V in tangent space.
 	 */
-	vec3 Bitangent;
+	vec3 Bitangent; // layout (location = 5)
 
 	/**
 	 * @brief Indices of influencing bones.
-	 *
-	 * Array of up to @ref MAX_BONE_INFLUENCE integers that reference bones
-	 * in the skeleton.
-	 * Used for skeletal animation.
 	 */
-	int BoneIDs[MAX_BONE_INFLUENCE];
+	int BoneIDs[MAX_BONE_INFLUENCE]; // layout (location = 6, optional)
 
 	/**
 	 * @brief Weights of influencing bones.
-	 *
-	 * Parallel array to @ref BoneIDs, with the corresponding influence
-	 * weights.
-	 * Values typically normalized so they sum to 1.0.
 	 */
-	int BoneWeights[MAX_BONE_INFLUENCE];
+	int BoneWeights[MAX_BONE_INFLUENCE]; // layout (location = 7, optional)
 } SkrVertex;
 
 /**
@@ -1246,23 +1234,34 @@ static inline void m_skr_gl_mesh_init(SkrMesh* m) {
 	             GL_STATIC_DRAW);
 
 	// position
+	glEnableVertexAttribArray(0);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(SkrVertex),
-	                      (void*)0);
-
-	// color
-	glEnableVertexAttribArray(1);
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(SkrVertex),
-	                      (void*)offsetof(SkrVertex, Color));
+	                      (void*)offsetof(SkrVertex, Position));
 
 	// normal
-	glEnableVertexAttribArray(2);
-	glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(SkrVertex),
+	glEnableVertexAttribArray(1);
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(SkrVertex),
 	                      (void*)offsetof(SkrVertex, Normal));
 
 	// uv
-	glEnableVertexAttribArray(3);
-	glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(SkrVertex),
+	glEnableVertexAttribArray(2);
+	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(SkrVertex),
 	                      (void*)offsetof(SkrVertex, UV));
+
+	// color
+	glEnableVertexAttribArray(3);
+	glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(SkrVertex),
+	                      (void*)offsetof(SkrVertex, Color));
+
+	// tangent
+	glEnableVertexAttribArray(4);
+	glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(SkrVertex),
+	                      (void*)offsetof(SkrVertex, Tangent));
+
+	// bitangent
+	glEnableVertexAttribArray(5);
+	glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, sizeof(SkrVertex),
+	                      (void*)offsetof(SkrVertex, Bitangent));
 
 	// glBindVertexArray(0);
 	// glUseProgram(m->Program->Backend.GL.ID);
