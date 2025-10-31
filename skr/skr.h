@@ -1009,7 +1009,24 @@ static inline void m_skr_gl_renderer_render(SkrState* s) {
 
 			glUseProgram(mesh->Program->Backend.GL.ID);
 			glBindVertexArray(mesh->VAO);
-			glDrawArrays(GL_TRIANGLES, 0, mesh->VertexCount);
+
+			if (model->Textures && model->TextureCount > 0) {
+				for (unsigned int t = 0;
+				     t < model->TextureCount; ++t) {
+					glActiveTexture(GL_TEXTURE0 + t);
+					glBindTexture(GL_TEXTURE_2D,
+					              model->Textures[t]
+					                      .Backend.GL.ID);
+				}
+			}
+
+			if (mesh->IndexCount > 0) {
+				glDrawElements(GL_TRIANGLES, mesh->IndexCount,
+				               GL_UNSIGNED_INT, 0);
+			} else {
+				glDrawArrays(GL_TRIANGLES, 0,
+				             mesh->VertexCount);
+			}
 		}
 	}
 }
