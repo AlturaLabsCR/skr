@@ -509,6 +509,8 @@ typedef struct SkrState {
 	} Backend;
 } SkrState;
 
+static bool m_skr_renderer_initialized = false;
+
 /**
  * @internal
  * @brief Set the last error message with source metadata.
@@ -1048,12 +1050,31 @@ static inline void m_skr_gl_renderer_finalize(SkrState* s) {
 	glUseProgram(0);
 }
 
+static inline void m_skr_renderer_finalize(SkrState* s) {
+	if (s->Backend.GL) {
+		m_skr_gl_renderer_finalize(s);
+
+		if (s->Window->Backend.Type == SKR_BACKEND_WINDOW_GLFW) {
+			glfwTerminate();
+		}
+	}
+
+	s->Models = NULL;
+	s->ModelCount = 0;
+	s->Window = NULL;
+}
+
 /**
  * @internal
  * @brief GLFW check if a GLFW window should close.
  */
-static inline int m_skr_gl_glfw_should_close(SkrWindow* w) {
-	return glfwWindowShouldClose(w->Backend.Handler.GLFW);
+static inline int m_skr_gl_glfw_should_close(SkrState* s) {
+	if (glfwWindowShouldClose(s->Window->Backend.Handler.GLFW)) {
+		m_skr_renderer_finalize(s);
+		return 1;
+	}
+
+	return 0;
 }
 
 /**
@@ -1177,9 +1198,9 @@ static inline SkrState SkrInit(SkrWindow* w, int backend) {
 	return s;
 }
 
-static inline int SkrWindowShouldClose(SkrWindow* w) {
+static inline int SkrShouldClose(SkrState* s) {
 	if (SKR_BACKEND_WINDOW == SKR_BACKEND_WINDOW_GLFW) {
-		return m_skr_gl_glfw_should_close(w);
+		return m_skr_gl_glfw_should_close(s);
 	}
 
 	return 0;
@@ -1239,7 +1260,7 @@ static inline void m_skr_gl_renderer_init(SkrState* s) {
 	}
 }
 
-static inline void SkrRendererInit(SkrState* s) {
+static inline void m_skr_renderer_init(SkrState* s) {
 	if (!s)
 		return;
 
@@ -1251,25 +1272,16 @@ static inline void SkrRendererRender(SkrState* s) {
 	if (!s || !s->Window)
 		return;
 
+	if (!m_skr_renderer_initialized) {
+		m_skr_gl_renderer_init(s);
+		m_skr_renderer_initialized = true;
+	}
+
 	if (SKR_BACKEND_WINDOW == SKR_BACKEND_WINDOW_GLFW) {
 		if (s->Backend.GL) {
 			m_skr_gl_glfw_renderer_render(s);
 		}
 	}
-}
-
-static inline void SkrFinalize(SkrState* s) {
-	if (s->Backend.GL) {
-		m_skr_gl_renderer_finalize(s);
-
-		if (s->Window->Backend.Type == SKR_BACKEND_WINDOW_GLFW) {
-			glfwTerminate();
-		}
-	}
-
-	s->Models = NULL;
-	s->ModelCount = 0;
-	s->Window = NULL;
 }
 
 static inline void m_skr_gl_triangle(SkrState* s) {
