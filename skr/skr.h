@@ -370,8 +370,8 @@ typedef struct SkrMesh {
 	 * Pointer to an array of @ref SkrVertex structs stored on the CPU.
 	 * Uploaded to GPU via the VBO. May be freed after upload if not needed.
 	 */
-	SkrVertex*   Vertices;
-	unsigned int VertexCount;
+	SkrVertex* Vertices;
+	int        VertexCount;
 
 	/**
 	 * @brief Index data count.
@@ -529,8 +529,9 @@ static inline void m_skr_last_error_set_with_meta(const char* file, int line,
 	va_list args;
 	va_start(args, fmt);
 
-	int written = snprintf(SKR_LAST_ERROR, SKR_LAST_ERROR_SIZE,
-	                       "[SKR] ERROR %s:%d:%s: ", file, line, func);
+	unsigned long written = (unsigned long)snprintf(
+	        SKR_LAST_ERROR, SKR_LAST_ERROR_SIZE,
+	        "[SKR] ERROR %s:%d:%s: ", file, line, func);
 
 	if (written < 0 || written >= SKR_LAST_ERROR_SIZE)
 		written = 0;
@@ -565,7 +566,7 @@ static inline void m_skr_last_error_set_with_meta(const char* file, int line,
  * @usage
  * m_skr_last_error_clear();
  */
-static inline void m_skr_last_error_clear() { SKR_LAST_ERROR[0] = '\0'; }
+static inline void m_skr_last_error_clear(void) { SKR_LAST_ERROR[0] = '\0'; }
 
 /**
  * @internal
@@ -622,14 +623,14 @@ static inline char* m_skr_read_file(const char* path) {
 	long len = ftell(file);
 	rewind(file);
 
-	char* buffer = (char*)malloc(len + 1);
+	char* buffer = (char*)malloc((unsigned long)len + 1);
 	if (!buffer) {
 		fclose(file);
 		m_skr_last_error_set("failed to open");
 		return NULL;
 	}
 
-	fread(buffer, 1, len, file);
+	fread(buffer, 1, (unsigned long)len, file);
 	buffer[len] = '\0';
 	fclose(file);
 
@@ -988,7 +989,7 @@ static inline void m_skr_gl_shader_set_mat4(const GLuint program,
 	m_skr_last_error_clear();
 }
 
-static inline void m_skr_gl_renderer_init() {}
+static inline void m_skr_gl_renderer_init(void) {}
 
 static inline void m_skr_gl_renderer_render(SkrState* s) {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1114,7 +1115,7 @@ static inline int m_skr_gl_load_texture_2d_from_path(const char*   path,
 	else if (nrChannels == 4)
 		format = GL_RGBA;
 
-	glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format,
+	glTexImage2D(GL_TEXTURE_2D, 0, (GLint)format, width, height, 0, format,
 	             GL_UNSIGNED_BYTE, data);
 	glGenerateMipmap(GL_TEXTURE_2D);
 
