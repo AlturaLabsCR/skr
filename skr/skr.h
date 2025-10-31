@@ -374,13 +374,10 @@ typedef struct SkrMesh {
 	int        VertexCount;
 
 	/**
-	 * @brief Index data count.
-	 *
-	 * Number of indices used to draw this mesh.
+	 * @brief Index data.
 	 */
-	unsigned int Indices;
-
-	SkrShaderProgram* Program;
+	unsigned int* Indices;
+	unsigned int  IndexCount;
 } SkrMesh;
 
 /**
@@ -1005,7 +1002,7 @@ static inline void m_skr_gl_renderer_render(SkrState* s) {
 			if (mesh->VAO == 0 || mesh->VertexCount == 0)
 				continue;
 
-			glUseProgram(mesh->Program->Backend.GL.ID);
+			// use shaders
 			glBindVertexArray(mesh->VAO);
 			glDrawArrays(GL_TRIANGLES, 0, mesh->VertexCount);
 		}
@@ -1268,10 +1265,7 @@ static inline void m_skr_gl_triangle(SkrState* s) {
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glBindVertexArray(0);
 
-	SkrShaderProgram program = {.Backend.GL.ID = prog};
-
 	mesh.VertexCount = 3;
-	mesh.Program = &program;
 	model.Meshes = &mesh;
 	model.MeshCount = 1;
 
