@@ -36,10 +36,10 @@ extern "C" {
 /**
  * @brief Identifies the type of graphics API backend in use.
  */
-typedef enum SkrApiBackendType {
+typedef enum SkrAPIBackendType {
 	SKR_BACKEND_API_GL, /*!< OpenGL API. */
 	SKR_BACKEND_API_VK, /*!< Vulkan API. */
-} SkrApiBackendType;
+} SkrAPIBackendType;
 
 /*
  * You can control which graphics API SKR uses by defining
@@ -63,9 +63,6 @@ typedef enum SkrApiBackendType {
 #ifndef VULKAN_H_
 #include <vulkan/vulkan.h>
 #endif
-
-/* Default API if none was specified: GL */
-#define SKR_BACKEND_API SKR_BACKEND_API_GL
 
 #else
 
@@ -176,9 +173,10 @@ typedef struct SkrShader {
 	/**
 	 * @brief Shader type.
 	 *
-	 * OpenGL shader type enum (e.g. GL_VERTEX_SHADER, GL_FRAGMENT_SHADER).
+	 * Can be used as OpenGL shader type enum (e.g. GL_VERTEX_SHADER,
+	 * GL_FRAGMENT_SHADER).
 	 */
-	const unsigned int Type;
+	unsigned int Type;
 
 	/**
 	 * @brief GLSL source code (optional).
@@ -186,7 +184,7 @@ typedef struct SkrShader {
 	 * If provided, the shader will be compiled directly from this string in
 	 * memory. May be NULL if the shader is loaded from a file.
 	 */
-	const char* Source;
+	const char* GLSL;
 
 	/**
 	 * @brief Path to shader file (optional).
@@ -197,19 +195,22 @@ typedef struct SkrShader {
 	const char* Path;
 } SkrShader;
 
-static char* skr_camera_3d_vert =
-        "#version 330 core\n"
-        "layout (location = 0) in vec3 aPos;\n"
-        "layout (location = 1) in vec2 aTexCoord;\n"
-        "out vec2 TexCoord;\n"
-        "uniform mat4 model;\n"
-        "uniform mat4 view;\n"
-        "uniform mat4 projection;\n"
-        "void main() {\n"
-        "gl_Position = projection * view * model * vec4(aPos, "
-        "1.0f);\n"
-        "TexCoord = vec2(aTexCoord.x, aTexCoord.y);\n"
-        "}\n";
+typedef struct SkrShaderProgram {
+	SkrShader*   Shaders;
+	unsigned int ShaderCount;
+	/**
+	 * @brief Backend-specific rendering data.
+	 *
+	 * Tagged union that stores handles or objects specific to the graphics
+	 * API backend in use. Only the member corresponding to the current
+	 * backend type is valid.
+	 */
+	union {
+		struct {
+			GLuint ID;
+		} GL;
+	} Backend;
+} SkrShaderProgram;
 
 /**
  * @brief Vertex structure used by the rendering engine.
@@ -303,13 +304,6 @@ typedef enum SkrTextureType {
  */
 typedef struct SkrTexture {
 	/**
-	 * @brief OpenGL texture object ID.
-	 *
-	 * Assigned by glGenTextures() and used to bind this texture to the GPU.
-	 */
-	unsigned int ID;
-
-	/**
 	 * @brief Texture semantic type.
 	 *
 	 * Indicates the role this texture plays in a material/shader.
@@ -333,6 +327,12 @@ typedef struct SkrTexture {
 	 * Original file location of the texture (e.g. "assets/diffuse.png").
 	 */
 	char* Path;
+
+	union {
+		struct {
+			GLuint ID;
+		} GL;
+	} Backend;
 } SkrTexture;
 
 /**
@@ -380,32 +380,7 @@ typedef struct SkrMesh {
 	 */
 	unsigned int Indices;
 
-	/**
-	 * @brief Associated textures.
-	 *
-	 * Pointer to an array of @ref SkrTexture objects that define the
-	 * materials of this mesh.
-	 */
-	SkrTexture*  Textures;
-	unsigned int TextureCount;
-
-	/**
-	 * @brief Backend-specific rendering data.
-	 *
-	 * Tagged union that stores handles or objects specific to the graphics
-	 * API backend in use. Only the member corresponding to the current
-	 * backend type is valid.
-	 */
-	union {
-		struct {
-			GLuint Program;
-		} GL;
-
-		struct {
-			VkPipeline       Pipeline;
-			VkPipelineLayout Layout;
-		} VK;
-	} Backend;
+	SkrShaderProgram* Program;
 } SkrMesh;
 
 /**
@@ -419,7 +394,16 @@ typedef struct SkrModel {
 	SkrMesh*     Meshes; /*!< Array of meshes that compose the model. */
 	unsigned int MeshCount;
 
-	char* Path; /*!< Filesystem path of the model file. */
+	/**
+	 * @brief Associated textures.
+	 *
+	 * Pointer to an array of @ref SkrTexture objects that define the
+	 * materials of this mesh.
+	 */
+	SkrTexture*  Textures;
+	unsigned int TextureCount;
+
+	char* Directory; /*!< Filesystem path of the model directory. */
 } SkrModel;
 
 /**
@@ -460,27 +444,6 @@ typedef struct SkrWindow {
 	SkrWindowBackend Backend;      /*!< Backend type and handle. */
 } SkrWindow;
 
-typedef struct SkrShaderProgram {
-	GLuint       ID;
-	char*        Name;
-	SkrShader*   Shaders;
-	unsigned int ShaderCount;
-} SkrShaderProgram;
-
-typedef struct SkrState {
-	SkrWindow* Window;
-
-	SkrModel*    Models;
-	unsigned int ModelCount;
-
-	SkrShaderProgram* Programs;
-	unsigned int      ProgramCount;
-} SkrState;
-
-typedef enum SkrCameraType {
-	SKR_CAMERA_3D,
-} SkrCameraType;
-
 /**
  * @brief First-person camera structure.
  *
@@ -497,17 +460,25 @@ typedef struct SkrCamera {
 	float Yaw;
 	float Pitch;
 	float FOV;
+	float Zoom;
 
 	float Sensitivity;
-	float LastX;      /*!< Last cursor X position. */
-	float LastY;      /*!< Last cursor Y position. */
-	bool  FirstMouse; /*!< Whether the first mouse movement has been
-	                     captured. */
-
-	SkrCameraType Type;
-
-	bool Initialized;
+	float Speed;
 } SkrCamera;
+
+static char* skr_camera_3d_vert =
+        "#version 330 core\n"
+        "layout (location = 0) in vec3 aPos;\n"
+        "layout (location = 1) in vec2 aTexCoord;\n"
+        "out vec2 TexCoord;\n"
+        "uniform mat4 model;\n"
+        "uniform mat4 view;\n"
+        "uniform mat4 projection;\n"
+        "void main() {\n"
+        "gl_Position = projection * view * model * vec4(aPos, "
+        "1.0f);\n"
+        "TexCoord = vec2(aTexCoord.x, aTexCoord.y);\n"
+        "}\n";
 
 #define SkrDefaultFPSCamera                                                    \
 	(&(SkrCamera){                                                         \
@@ -518,18 +489,24 @@ typedef struct SkrCamera {
 	        .Yaw = -90.0f,                                                 \
 	        .Pitch = 0.0f,                                                 \
 	        .FOV = 70.0f,                                                  \
+	        .Zoom = 1.0f,                                                  \
                                                                                \
 	        .Sensitivity = 0.1f,                                           \
-	        .LastX = 400.0f,                                               \
-	        .LastY = 300.0f,                                               \
-	        .FirstMouse = true,                                            \
-                                                                               \
-	        .Type = SKR_CAMERA_3D,                                         \
-                                                                               \
-	        .Initialized = true,                                           \
+	        .Speed = 0.1f,                                                 \
 	})
 
-extern SkrCamera* g_skr_camera;
+typedef struct SkrState {
+	SkrWindow* Window;
+
+	SkrModel*    Models;
+	unsigned int ModelCount;
+
+	SkrCamera* Camera;
+
+	union {
+		bool GL;
+	} Backend;
+} SkrState;
 
 /**
  * @internal
@@ -691,49 +668,6 @@ static inline void m_skr_gl_glfw_framebuffer_size_callback(GLFWwindow* window,
 	m_skr_last_error_clear();
 }
 
-static inline void m_skr_gl_glfw_mouse_callback(GLFWwindow* window,
-                                                double xposIn, double yposIn) {
-	float xpos = xposIn;
-	float ypos = yposIn;
-
-	if (g_skr_camera->FirstMouse) {
-		g_skr_camera->LastX = xpos;
-		g_skr_camera->LastY = ypos;
-		g_skr_camera->FirstMouse = false;
-	}
-
-	float xoffset = xpos - g_skr_camera->LastX;
-	float yoffset =
-	        g_skr_camera->LastY -
-	        ypos; // reversed since y-coordinates go from bottom to top
-	g_skr_camera->LastX = xpos;
-	g_skr_camera->LastY = ypos;
-
-	float sensitivity = g_skr_camera->Sensitivity;
-	xoffset *= sensitivity;
-	yoffset *= sensitivity;
-
-	g_skr_camera->Yaw += xoffset;
-	g_skr_camera->Pitch += yoffset;
-
-	// make sure that when pitch is out of bounds, screen doesn't get
-	// flipped
-	if (g_skr_camera->Pitch > 89.0f)
-		g_skr_camera->Pitch = 89.0f;
-	if (g_skr_camera->Pitch < -89.0f)
-		g_skr_camera->Pitch = -89.0f;
-
-	vec3 front = {0.0f, 0.0f, 0.0f};
-
-	front[0] = cosf(glm_rad(g_skr_camera->Yaw)) *
-	           cosf(glm_rad(g_skr_camera->Pitch));
-	front[1] = sinf(glm_rad(g_skr_camera->Pitch));
-	front[2] = sinf(glm_rad(g_skr_camera->Yaw)) *
-	           cosf(glm_rad(g_skr_camera->Pitch));
-
-	glm_vec3_normalize_to(front, g_skr_camera->Front);
-}
-
 /**
  * @internal
  * @brief Initialize a GLFW window for OpenGL rendering.
@@ -768,12 +702,8 @@ static inline int m_skr_gl_glfw_init(SkrWindow* w) {
 
 	glfwSetFramebufferSizeCallback(w->Backend.Handler.GLFW,
 	                               m_skr_gl_glfw_framebuffer_size_callback);
-	glfwMakeContextCurrent(w->Backend.Handler.GLFW);
 
-	if (g_skr_camera) {
-		glfwSetCursorPosCallback(w->Backend.Handler.GLFW,
-		                         m_skr_gl_glfw_mouse_callback);
-	}
+	glfwMakeContextCurrent(w->Backend.Handler.GLFW);
 
 	m_skr_last_error_clear();
 	return 1;
@@ -943,8 +873,8 @@ m_skr_gl_create_program_from_shaders(const SkrShader* shader_array,
 		const SkrShader* s = &shader_array[i];
 		GLuint           shader = 0;
 
-		if (s->Source) {
-			shader = m_skr_gl_create_shader(s->Type, s->Source);
+		if (s->GLSL) {
+			shader = m_skr_gl_create_shader(s->Type, s->GLSL);
 		} else if (s->Path) {
 			shader = m_skr_gl_create_shader_from_file(s->Type,
 			                                          s->Path);
@@ -982,23 +912,14 @@ m_skr_gl_create_program_from_shaders(const SkrShader* shader_array,
 
 /**
  * @internal
- * @brief GL use an OpenGL shader program.
- */
-static inline void m_skr_gl_shader_use(const GLuint program) {
-	glUseProgram(program);
-	m_skr_last_error_clear();
-}
-
-/**
- * @internal
  * @brief GL destroy an OpenGL shader program.
  *
  * @param program Pointer to program ID. Resets to 0 on success.
  */
-static inline void m_skr_gl_shader_destroy(GLuint* program) {
-	if (program && *program) {
-		glDeleteProgram(*program);
-		*program = 0;
+static inline void m_skr_gl_shader_destroy(GLuint program) {
+	if (program) {
+		glDeleteProgram(program);
+		program = 0;
 		m_skr_last_error_clear();
 	}
 }
@@ -1069,10 +990,6 @@ static inline void m_skr_gl_shader_set_mat4(const GLuint program,
 
 static inline void m_skr_gl_renderer_init() {}
 
-/**
- * @internal
- * @brief GL clear screen (color + depth).
- */
 static inline void m_skr_gl_renderer_render(SkrState* s) {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -1087,28 +1004,7 @@ static inline void m_skr_gl_renderer_render(SkrState* s) {
 			if (mesh->VAO == 0 || mesh->VertexCount == 0)
 				continue;
 
-			if (g_skr_camera) {
-				mat4 projection;
-				glm_perspective(
-				        glm_rad(g_skr_camera->FOV),
-				        (float)s->Window->Width /
-				                (float)s->Window->Height,
-				        0.1f, 100.0f, projection);
-				m_skr_gl_shader_set_mat4(
-				        mesh->Backend.GL.Program, "projection",
-				        projection);
-
-				vec3 center;
-				glm_vec3_add(g_skr_camera->Position,
-				             g_skr_camera->Front, center);
-				mat4 view;
-				glm_lookat(g_skr_camera->Position, center,
-				           g_skr_camera->Up, view);
-				m_skr_gl_shader_set_mat4(
-				        mesh->Backend.GL.Program, "view", view);
-			}
-
-			glUseProgram(mesh->Backend.GL.Program);
+			glUseProgram(mesh->Program->Backend.GL.ID);
 			glBindVertexArray(mesh->VAO);
 			glDrawArrays(GL_TRIANGLES, 0, mesh->VertexCount);
 		}
@@ -1117,32 +1013,25 @@ static inline void m_skr_gl_renderer_render(SkrState* s) {
 	glBindVertexArray(0);
 }
 
-/**
- * @internal
- * @brief GL free VAO/VBO/EBO of a mesh.
- *
- * Usually called at shutdown, not per-frame.
- */
 static inline void m_skr_gl_renderer_finalize(SkrState* s) {
 	if (!s)
 		return;
 
 	for (unsigned int i = 0; i < s->ModelCount; ++i) {
 		SkrModel* model = &s->Models[i];
+
+		if (model->Textures && model->TextureCount > 0) {
+			for (unsigned int t = 0; t < model->TextureCount; ++t) {
+				glDeleteTextures(
+				        1, &model->Textures[t].Backend.GL.ID);
+			}
+		}
+
 		if (!model->Meshes)
 			continue;
 
 		for (unsigned int j = 0; j < model->MeshCount; ++j) {
 			SkrMesh* mesh = &model->Meshes[j];
-
-			if (mesh->Textures && mesh->TextureCount > 0) {
-				for (unsigned int t = 0; t < mesh->TextureCount;
-				     ++t) {
-					glDeleteTextures(1,
-					                 &mesh->Textures[t].ID);
-				}
-			}
-
 			if (mesh->VAO)
 				glDeleteVertexArrays(1, &mesh->VAO);
 			if (mesh->VBO)
@@ -1151,7 +1040,6 @@ static inline void m_skr_gl_renderer_finalize(SkrState* s) {
 				glDeleteBuffers(1, &mesh->EBO);
 
 			mesh->VAO = mesh->VBO = mesh->EBO = 0;
-			mesh->Backend.GL.Program = 0;
 		}
 	}
 
@@ -1266,10 +1154,12 @@ static inline void m_skr_free_textures_2d(unsigned int* textures,
 	}
 }
 
-static inline int SkrWindowInit(SkrWindow* w) {
-	if (SKR_BACKEND_API == SKR_BACKEND_API_GL) {
-		if (SKR_BACKEND_WINDOW == SKR_BACKEND_WINDOW_GLFW) {
-			if (!m_skr_gl_glfw_init(w)) {
+static inline int m_skr_window_init(SkrState* s, int backend) {
+	if (SKR_BACKEND_WINDOW == SKR_BACKEND_WINDOW_GLFW) {
+		if (backend == SKR_BACKEND_API_GL) {
+			s->Backend.GL = true;
+
+			if (!m_skr_gl_glfw_init(s->Window)) {
 				return 0;
 			}
 		}
@@ -1278,13 +1168,13 @@ static inline int SkrWindowInit(SkrWindow* w) {
 	return 1;
 }
 
-static inline SkrState SkrInit(SkrWindow* w) {
+static inline SkrState SkrInit(SkrWindow* w, int backend) {
 	SkrState s = {0};
+	s.Window = w;
 
-	if (!SkrWindowInit(w))
+	if (!m_skr_window_init(&s, backend))
 		return (SkrState){0};
 
-	s.Window = w;
 	return s;
 }
 
@@ -1301,62 +1191,21 @@ static inline void SkrRendererInit(SkrState* s) {
 		return;
 
 	glEnable(GL_DEPTH_TEST);
-
-	for (unsigned int i = 0; i < s->ModelCount; ++i) {
-		SkrModel* model = &s->Models[i];
-		for (unsigned int j = 0; j < model->MeshCount; ++j) {
-			SkrMesh* mesh = &model->Meshes[j];
-
-			glGenVertexArrays(1, &mesh->VAO);
-			glGenBuffers(1, &mesh->VBO);
-			glBindVertexArray(mesh->VAO);
-			glBindBuffer(GL_ARRAY_BUFFER, mesh->VBO);
-
-			glBufferData(GL_ARRAY_BUFFER,
-			             mesh->VertexCount * sizeof(SkrVertex),
-			             mesh->Vertices, GL_STATIC_DRAW);
-
-			glVertexAttribPointer(
-			        0, 3, GL_FLOAT, GL_FALSE, sizeof(SkrVertex),
-			        (void*)offsetof(SkrVertex, Position));
-			glEnableVertexAttribArray(0);
-
-			glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE,
-			                      sizeof(SkrVertex),
-			                      (void*)offsetof(SkrVertex, UV));
-			glEnableVertexAttribArray(1);
-
-			for (unsigned int t = 0; t < mesh->TextureCount; ++t) {
-				SkrTexture* tex = &mesh->Textures[t];
-				if (tex->Path && !tex->ID) {
-					unsigned int tex_id;
-					if (m_skr_gl_load_texture_2d_from_path(
-					            tex->Path, &tex_id)) {
-						tex->ID = tex_id;
-					}
-				}
-			}
-
-			glUseProgram(mesh->Backend.GL.Program);
-
-			glBindVertexArray(0);
-		}
-	}
 }
 
 static inline void SkrRendererRender(SkrState* s) {
 	if (!s || !s->Window)
 		return;
 
-	if (SKR_BACKEND_API == SKR_BACKEND_API_GL) {
-		if (SKR_BACKEND_WINDOW == SKR_BACKEND_WINDOW_GLFW) {
+	if (SKR_BACKEND_WINDOW == SKR_BACKEND_WINDOW_GLFW) {
+		if (s->Backend.GL) {
 			m_skr_gl_glfw_renderer_render(s);
 		}
 	}
 }
 
 static inline void SkrFinalize(SkrState* s) {
-	if (SKR_BACKEND_API == SKR_BACKEND_API_GL) {
+	if (s->Backend.GL) {
 		m_skr_gl_renderer_finalize(s);
 
 		if (s->Window->Backend.Type == SKR_BACKEND_WINDOW_GLFW) {
@@ -1369,7 +1218,7 @@ static inline void SkrFinalize(SkrState* s) {
 	s->Window = NULL;
 }
 
-static inline GLuint m_skr_gl_triangle(SkrState* s) {
+static inline void m_skr_gl_triangle(SkrState* s) {
 	static SkrMesh  mesh = {0};
 	static SkrModel model = {0};
 
@@ -1394,9 +1243,9 @@ static inline GLuint m_skr_gl_triangle(SkrState* s) {
 	        {GL_FRAGMENT_SHADER, triangle_frag, NULL},
 	};
 
-	mesh.Backend.GL.Program =
+	GLuint prog =
 	        m_skr_gl_create_program_from_shaders(shaders, sizeof(shaders));
-	glUseProgram(mesh.Backend.GL.Program);
+	glUseProgram(prog);
 
 	glGenVertexArrays(1, &mesh.VAO);
 	glGenBuffers(1, &mesh.VBO);
@@ -1418,18 +1267,21 @@ static inline GLuint m_skr_gl_triangle(SkrState* s) {
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glBindVertexArray(0);
 
+	SkrShaderProgram program = {.Backend.GL.ID = prog};
+
 	mesh.VertexCount = 3;
+	mesh.Program = &program;
 	model.Meshes = &mesh;
 	model.MeshCount = 1;
 
 	s->Models = &model;
 	s->ModelCount = 1;
 
-	return mesh.Backend.GL.Program;
+	return;
 }
 
 static inline void SkrTriangle(SkrState* s) {
-	if (SKR_BACKEND_API == SKR_BACKEND_API_GL) {
+	if (s->Backend.GL) {
 		m_skr_gl_triangle(s);
 	}
 }
@@ -1441,25 +1293,21 @@ static inline void SkrCaptureCursor(SkrState* s) {
 	}
 }
 
-static inline void m_skr_gl_mesh_init(SkrMesh* m) {
-	if (!m || !m->Vertices || m->VertexCount == 0) {
-		m_skr_last_error_set("Invalid mesh: missing vertices or count");
+static inline void m_skr_gl_mesh_init(SkrMesh* m, SkrVertex* vertices,
+                                      size_t size) {
+	if (!vertices || size == 0) {
+		m_skr_last_error_set("missing vertices or size");
 		return;
 	}
 
 	glGenVertexArrays(1, &m->VAO);
-
 	glGenBuffers(1, &m->VBO);
-
 	glBindVertexArray(m->VAO);
-
 	glBindBuffer(GL_ARRAY_BUFFER, m->VBO);
-
-	glBufferData(GL_ARRAY_BUFFER, sizeof(SkrVertex) * m->VertexCount,
-	             m->Vertices, GL_STATIC_DRAW);
-
-	// vertex positions
+	glBufferData(GL_ARRAY_BUFFER, size, vertices, GL_STATIC_DRAW);
 	glEnableVertexAttribArray(0);
+
+	// vertex position
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(SkrVertex),
 	                      (void*)0);
 	// vertex normals
@@ -1473,53 +1321,7 @@ static inline void m_skr_gl_mesh_init(SkrMesh* m) {
 
 	glBindVertexArray(0);
 
-	if (m->Textures && m->TextureCount > 0) {
-		for (unsigned int i = 0; i < m->TextureCount; ++i) {
-			SkrTexture* tex = &m->Textures[i];
-
-			if (!tex->Path) {
-				continue;
-			}
-
-			unsigned int id = 0;
-			if (!m_skr_gl_load_texture_2d_from_path(tex->Path,
-			                                        &id)) {
-				fprintf(stderr, "Failed to load texture: %s\n",
-				        tex->Path);
-				continue;
-			}
-
-			tex->ID = id;
-			tex->Type = (i == 0) ? SKR_TEXTURE_DIFFUSE
-			                     : SKR_TEXTURE_SPECULAR;
-		}
-	}
-
 	m_skr_last_error_clear();
-}
-
-/**
- * @brief Bind all textures of a mesh to consecutive texture units.
- *        Starts at GL_TEXTURE0 and binds each SkrTexture.ID in order.
- *
- * @param mesh The mesh whose textures to bind.
- */
-static inline void m_skr_gl_mesh_bind_textures(const SkrMesh* mesh) {
-	if (!mesh || !mesh->Textures || mesh->TextureCount == 0)
-		return;
-
-	for (unsigned int i = 0; i < mesh->TextureCount; ++i) {
-		const SkrTexture* tex = &mesh->Textures[i];
-
-		if (tex->ID == 0) {
-			continue;
-		}
-
-		glActiveTexture(GL_TEXTURE0 + i); // activate unit N
-		glBindTexture(GL_TEXTURE_2D, tex->ID);
-	}
-
-	glActiveTexture(GL_TEXTURE0);
 }
 
 #ifdef __cplusplus
