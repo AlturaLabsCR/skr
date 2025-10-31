@@ -1206,19 +1206,27 @@ static inline int SkrShouldClose(SkrState* s) {
 	return 0;
 }
 
-static inline void m_skr_gl_mesh_init(SkrMesh* m, SkrVertex* vertices,
-                                      size_t size) {
-	if (!vertices || size == 0) {
+static inline void m_skr_gl_mesh_init(SkrMesh* m) {
+	if (!m) {
 		m_skr_last_error_set("missing vertices or size");
 		return;
 	}
 
 	glGenVertexArrays(1, &m->VAO);
 	glGenBuffers(1, &m->VBO);
+	glGenBuffers(1, &m->EBO);
+
 	glBindVertexArray(m->VAO);
+
 	glBindBuffer(GL_ARRAY_BUFFER, m->VBO);
-	glBufferData(GL_ARRAY_BUFFER, size, vertices, GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, m->VertexCount * sizeof(SkrVertex),
+	             m->Vertices, GL_STATIC_DRAW);
 	glEnableVertexAttribArray(0);
+
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m->EBO);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+	             m->IndexCount * sizeof(unsigned int), m->Indices,
+	             GL_STATIC_DRAW);
 
 	// position
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(SkrVertex),
@@ -1252,10 +1260,7 @@ static inline void m_skr_gl_renderer_init(SkrState* s) {
 		SkrModel* model = &s->Models[i];
 		for (int j = 0; j < model->MeshCount; j++) {
 			SkrMesh* mesh = &model->Meshes[j];
-
-			m_skr_gl_mesh_init(mesh, mesh->Vertices,
-			                   mesh->VertexCount *
-			                           sizeof(SkrVertex));
+			m_skr_gl_mesh_init(mesh);
 		}
 	}
 }
