@@ -1,0 +1,55 @@
+var skr_8h =
+[
+    [ "SkrShader", "structSkrShader.html", "structSkrShader" ],
+    [ "SkrShaderProgram", "structSkrShaderProgram.html", "structSkrShaderProgram" ],
+    [ "SkrVertex", "structSkrVertex.html", "structSkrVertex" ],
+    [ "SkrTexture", "structSkrTexture.html", "structSkrTexture" ],
+    [ "SkrMesh", "structSkrMesh.html", "structSkrMesh" ],
+    [ "SkrModel", "structSkrModel.html", "structSkrModel" ],
+    [ "SkrWindowBackend", "structSkrWindowBackend.html", "structSkrWindowBackend" ],
+    [ "SkrWindow", "structSkrWindow.html", "structSkrWindow" ],
+    [ "SkrCamera", "structSkrCamera.html", "structSkrCamera" ],
+    [ "SkrState", "structSkrState.html", "structSkrState" ],
+    [ "m_skr_last_error_set", "skr_8h.html#aa84df83db60579623757c7772b8fd649", null ],
+    [ "MAX_BONE_INFLUENCE", "skr_8h.html#a727516f3c023a19677eba7926d3bd7ce", null ],
+    [ "SKR_BACKEND_WINDOW", "skr_8h.html#a8d27221d030bf0c3c2ce6d8ff448ed15", null ],
+    [ "SKR_LAST_ERROR_SIZE", "skr_8h.html#a89f118e7be1ab0a255ae15142fed13ee", null ],
+    [ "SKR_OK", "skr_8h.html#a7e9d8031bffa5c578c4d3c90434da201", null ],
+    [ "SkrDefaultFPSCamera", "skr_8h.html#a364fc71dda6e274688e475cf8fd9a848", null ],
+    [ "SkrAPIBackendType", "skr_8h.html#a48c43c9e23cff071824049d2c760380b", null ],
+    [ "SkrCamera", "skr_8h.html#ad867a22c35fee84ac03c700e10b6989f", null ],
+    [ "SkrInputHandler", "skr_8h.html#a61183f2a7d3ad6cd2c92eafd51422f2b", null ],
+    [ "SkrMesh", "skr_8h.html#afadb2eae274e88fadd44727ef14489f5", null ],
+    [ "SkrModel", "skr_8h.html#a19c1c78480b45f6530ea0e2b4aff42b5", null ],
+    [ "SkrShader", "skr_8h.html#ada9654393b1621972c1f3d0c79e914d7", null ],
+    [ "SkrShaderProgram", "skr_8h.html#a33c54cab0f3e4ad91367615e0e21a86a", null ],
+    [ "SkrState", "skr_8h.html#aa693f00fbf8559dab215408ec2c90309", null ],
+    [ "SkrTexture", "skr_8h.html#a51bcde7c9e924fc4fae7e22e4a86c0e4", null ],
+    [ "SkrTextureType", "skr_8h.html#a3a6335c9eb63ce58a79c05ed779c44eb", null ],
+    [ "SkrVertex", "skr_8h.html#aeadf50a23b90c42cc2d32c3bed69a0c7", null ],
+    [ "SkrWindow", "skr_8h.html#afc5cab3ab4cfd33a1410a293127774c9", null ],
+    [ "SkrWindowBackend", "skr_8h.html#a12dc191bbfefa63774759dfd33d51b24", null ],
+    [ "SkrWindowBackendType", "skr_8h.html#a9c9d6b0612fee382126772d9a9d9edf3", null ],
+    [ "SkrAPIBackendType", "skr_8h.html#a6d9b7af33bd340177751a851c5df1f71", [
+      [ "SKR_BACKEND_API_GL", "skr_8h.html#a6d9b7af33bd340177751a851c5df1f71aaf210341679f4726a3d4de6ea1931a25", null ],
+      [ "SKR_BACKEND_API_VK", "skr_8h.html#a6d9b7af33bd340177751a851c5df1f71a151e724144b35ffa79cf2bd3a9fedffb", null ]
+    ] ],
+    [ "SkrTextureType", "skr_8h.html#a6115a9184c51bfece0ed3344a6fc6b9a", [
+      [ "SKR_TEXTURE_DIFFUSE", "skr_8h.html#a6115a9184c51bfece0ed3344a6fc6b9aa6bb952f6969587d18c29b56521bc40d1", null ],
+      [ "SKR_TEXTURE_SPECULAR", "skr_8h.html#a6115a9184c51bfece0ed3344a6fc6b9aa78e8ac49769a19c2f6d0a63138c1a1a7", null ],
+      [ "SKR_TEXTURE_NORMAL", "skr_8h.html#a6115a9184c51bfece0ed3344a6fc6b9aa0aa6fe74c417fbb851e812cb49d6a3ce", null ],
+      [ "SKR_TEXTURE_HEIGHT", "skr_8h.html#a6115a9184c51bfece0ed3344a6fc6b9aaeddf06590657260f9ee017f8eb705ec8", null ],
+      [ "SKR_TEXTURE_EMISSIVE", "skr_8h.html#a6115a9184c51bfece0ed3344a6fc6b9aad019e3f19957b20cdfaf8b92f7e60685", null ],
+      [ "SKR_TEXTURE_AMBIENT", "skr_8h.html#a6115a9184c51bfece0ed3344a6fc6b9aa9dec35f06348029553554815ff3c9a29", null ],
+      [ "SKR_TEXTURE_METALLIC", "skr_8h.html#a6115a9184c51bfece0ed3344a6fc6b9aa55299a7f6f3341ac15aaf0a1b99973b6", null ],
+      [ "SKR_TEXTURE_ROUGHNESS", "skr_8h.html#a6115a9184c51bfece0ed3344a6fc6b9aafd13755776c8492469471d4c8bba55ab", null ],
+      [ "SKR_TEXTURE_REFLECTION", "skr_8h.html#a6115a9184c51bfece0ed3344a6fc6b9aa771c20752a38680917a3027aa50f3408", null ],
+      [ "SKR_TEXTURE_UNKNOWN", "skr_8h.html#a6115a9184c51bfece0ed3344a6fc6b9aaab8a559b7628d20f9a574d209d79e00c", null ]
+    ] ],
+    [ "SkrWindowBackendType", "skr_8h.html#a4b0256648e4ab2d392271ba178e0ef81", [
+      [ "SKR_BACKEND_WINDOW_GLFW", "skr_8h.html#a4b0256648e4ab2d392271ba178e0ef81ac0245959e2ac3436bc831764b7f81b03", null ],
+      [ "SKR_BACKEND_WINDOW_SDL", "skr_8h.html#a4b0256648e4ab2d392271ba178e0ef81ab3e9855be983135e590e9ce9d272fc02", null ]
+    ] ],
+    [ "m_skr_free_image", "skr_8h.html#ab4a82cbba94ad245d57ffa1d84c705ef", null ],
+    [ "m_skr_load_image_from_file", "skr_8h.html#aad994f392ac2cfa2fbd06c7f915efa5a", null ]
+];
