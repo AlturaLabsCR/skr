@@ -36,10 +36,10 @@ extern "C" {
 /**
  * @brief Identifies the type of graphics API backend in use.
  */
-typedef enum SkrApiBackendType {
+typedef enum SkrAPIBackendType {
 	SKR_BACKEND_API_GL, /*!< OpenGL API. */
 	SKR_BACKEND_API_VK, /*!< Vulkan API. */
-} SkrApiBackendType;
+} SkrAPIBackendType;
 
 /*
  * You can control which graphics API SKR uses by defining
@@ -64,8 +64,12 @@ typedef enum SkrApiBackendType {
 #include <vulkan/vulkan.h>
 #endif
 
-/* Default API if none was specified: GL */
-#define SKR_BACKEND_API SKR_BACKEND_API_GL
+#else
+
+#if !defined(VULKAN_H_)
+typedef struct VkPipeline_T*       VkPipeline;
+typedef struct VkPipelineLayout_T* VkPipelineLayout;
+#endif
 
 #endif
 
@@ -169,9 +173,10 @@ typedef struct SkrShader {
 	/**
 	 * @brief Shader type.
 	 *
-	 * OpenGL shader type enum (e.g. GL_VERTEX_SHADER, GL_FRAGMENT_SHADER).
+	 * Can be used as OpenGL shader type enum (e.g. GL_VERTEX_SHADER,
+	 * GL_FRAGMENT_SHADER).
 	 */
-	const unsigned int Type;
+	unsigned int Type;
 
 	/**
 	 * @brief GLSL source code (optional).
@@ -179,7 +184,7 @@ typedef struct SkrShader {
 	 * If provided, the shader will be compiled directly from this string in
 	 * memory. May be NULL if the shader is loaded from a file.
 	 */
-	const char* Source;
+	const char* GLSL;
 
 	/**
 	 * @brief Path to shader file (optional).
@@ -189,6 +194,23 @@ typedef struct SkrShader {
 	 */
 	const char* Path;
 } SkrShader;
+
+typedef struct SkrShaderProgram {
+	SkrShader*   Shaders;
+	unsigned int ShaderCount;
+	/**
+	 * @brief Backend-specific rendering data.
+	 *
+	 * Tagged union that stores handles or objects specific to the graphics
+	 * API backend in use. Only the member corresponding to the current
+	 * backend type is valid.
+	 */
+	union {
+		struct {
+			GLuint ID;
+		} GL;
+	} Backend;
+} SkrShaderProgram;
 
 /**
  * @brief Vertex structure used by the rendering engine.
@@ -200,59 +222,49 @@ typedef struct SkrShader {
 typedef struct SkrVertex {
 	/**
 	 * @brief Vertex position in object space.
-	 *
 	 * Three-component vector (x, y, z).
 	 */
-	vec3 Position;
+	vec3 Position; // layout (location = 0)
 
 	/**
 	 * @brief Vertex normal vector.
-	 *
 	 * Used for lighting calculations. Three components (x, y, z).
 	 */
-	vec3 Normal;
+	vec3 Normal; // layout (location = 1)
 
 	/**
 	 * @brief Texture coordinates (UV).
-	 *
 	 * Two-component vector (u, v), typically in the range [0, 1].
 	 */
-	vec2 UV;
+	vec2 UV; // layout (location = 2)
+
+	/**
+	 * @brief Vertex color.
+	 * Optional per-vertex color.
+	 */
+	vec3 Color; // layout (location = 3)
 
 	/**
 	 * @brief Tangent vector.
-	 *
-	 * Defines the direction of increasing U in the tangent space.
-	 * Used for normal mapping. Three components (x, y, z).
+	 * Defines the direction of increasing U in tangent space.
 	 */
-	vec3 Tangent;
+	vec3 Tangent; // layout (location = 4)
 
 	/**
 	 * @brief Bitangent vector.
-	 *
-	 * Defines the direction of increasing V in the tangent space.
-	 * Orthogonal to both the normal and tangent. Three components (x, y,
-	 * z).
+	 * Defines the direction of increasing V in tangent space.
 	 */
-	vec3 Bitangent;
+	vec3 Bitangent; // layout (location = 5)
 
 	/**
 	 * @brief Indices of influencing bones.
-	 *
-	 * Array of up to @ref MAX_BONE_INFLUENCE integers that reference bones
-	 * in the skeleton.
-	 * Used for skeletal animation.
 	 */
-	int BoneIDs[MAX_BONE_INFLUENCE];
+	int BoneIDs[MAX_BONE_INFLUENCE]; // layout (location = 6, optional)
 
 	/**
 	 * @brief Weights of influencing bones.
-	 *
-	 * Parallel array to @ref BoneIDs, with the corresponding influence
-	 * weights.
-	 * Values typically normalized so they sum to 1.0.
 	 */
-	int BoneWeights[MAX_BONE_INFLUENCE];
+	int BoneWeights[MAX_BONE_INFLUENCE]; // layout (location = 7, optional)
 } SkrVertex;
 
 /**
@@ -282,13 +294,6 @@ typedef enum SkrTextureType {
  */
 typedef struct SkrTexture {
 	/**
-	 * @brief OpenGL texture object ID.
-	 *
-	 * Assigned by glGenTextures() and used to bind this texture to the GPU.
-	 */
-	unsigned int ID;
-
-	/**
 	 * @brief Texture semantic type.
 	 *
 	 * Indicates the role this texture plays in a material/shader.
@@ -312,6 +317,12 @@ typedef struct SkrTexture {
 	 * Original file location of the texture (e.g. "assets/diffuse.png").
 	 */
 	char* Path;
+
+	union {
+		struct {
+			GLuint ID;
+		} GL;
+	} Backend;
 } SkrTexture;
 
 /**
@@ -349,24 +360,16 @@ typedef struct SkrMesh {
 	 * Pointer to an array of @ref SkrVertex structs stored on the CPU.
 	 * Uploaded to GPU via the VBO. May be freed after upload if not needed.
 	 */
-	SkrVertex*   Vertices;
-	unsigned int VertexCount;
+	SkrVertex* Vertices;
+	int        VertexCount;
 
 	/**
-	 * @brief Index data count.
-	 *
-	 * Number of indices used to draw this mesh.
+	 * @brief Index data.
 	 */
-	unsigned int Indices;
+	unsigned int* Indices;
+	unsigned int  IndexCount;
 
-	/**
-	 * @brief Associated textures.
-	 *
-	 * Pointer to an array of @ref SkrTexture objects that define the
-	 * materials of this mesh.
-	 */
-	SkrTexture*  Textures;
-	unsigned int TextureCount;
+	SkrShaderProgram* Program;
 } SkrMesh;
 
 /**
@@ -380,10 +383,16 @@ typedef struct SkrModel {
 	SkrMesh*     Meshes; /*!< Array of meshes that compose the model. */
 	unsigned int MeshCount;
 
-	SkrTexture*  Textures; /*!< Array of textures used by model's meshes. */
+	/**
+	 * @brief Associated textures.
+	 *
+	 * Pointer to an array of @ref SkrTexture objects that define the
+	 * materials of this mesh.
+	 */
+	SkrTexture*  Textures;
 	unsigned int TextureCount;
 
-	char* Path; /*!< Filesystem path of the model file. */
+	char* Directory; /*!< Filesystem path of the model directory. */
 } SkrModel;
 
 /**
@@ -424,12 +433,71 @@ typedef struct SkrWindow {
 	SkrWindowBackend Backend;      /*!< Backend type and handle. */
 } SkrWindow;
 
+/**
+ * @brief First-person camera structure.
+ *
+ * Stores position, orientation, and field-of-view.
+ * Can be controlled by mouse and keyboard input.
+ */
+typedef struct SkrCamera {
+	vec3 Position; /*!< Camera position in world space. */
+	vec3 Front;    /*!< Normalized forward vector. */
+	vec3 Up;       /*!< Normalized up vector. */
+	vec3 Right;    /*!< Normalized right vector. */
+	vec3 WorldUp;  /*!< Global up direction, usually {0, 1, 0}. */
+
+	float Yaw;
+	float Pitch;
+	float FOV;
+	float Zoom;
+
+	float Sensitivity;
+	float Speed;
+} SkrCamera;
+
+static char* skr_camera_3d_vert =
+        "#version 330 core\n"
+        "layout (location = 0) in vec3 aPos;\n"
+        "layout (location = 1) in vec2 aTexCoord;\n"
+        "out vec2 TexCoord;\n"
+        "uniform mat4 model;\n"
+        "uniform mat4 view;\n"
+        "uniform mat4 projection;\n"
+        "void main() {\n"
+        "gl_Position = projection * view * model * vec4(aPos, "
+        "1.0f);\n"
+        "TexCoord = vec2(aTexCoord.x, aTexCoord.y);\n"
+        "}\n";
+
+#define SkrDefaultFPSCamera                                                    \
+	(&(SkrCamera){                                                         \
+	        .Position = {0.0f, 0.0f, 3.0f},                                \
+	        .Front = {0.0f, 0.0f, -1.0f},                                  \
+	        .Up = {0.0f, 1.0f, 0.0f},                                      \
+                                                                               \
+	        .Yaw = -90.0f,                                                 \
+	        .Pitch = 0.0f,                                                 \
+	        .FOV = 70.0f,                                                  \
+	        .Zoom = 1.0f,                                                  \
+                                                                               \
+	        .Sensitivity = 0.1f,                                           \
+	        .Speed = 0.1f,                                                 \
+	})
+
 typedef struct SkrState {
 	SkrWindow* Window;
 
 	SkrModel*    Models;
 	unsigned int ModelCount;
+
+	SkrCamera* Camera;
+
+	union {
+		bool GL;
+	} Backend;
 } SkrState;
+
+static bool m_skr_renderer_initialized = false;
 
 /**
  * @internal
@@ -452,8 +520,9 @@ static inline void m_skr_last_error_set_with_meta(const char* file, int line,
 	va_list args;
 	va_start(args, fmt);
 
-	int written = snprintf(SKR_LAST_ERROR, SKR_LAST_ERROR_SIZE,
-	                       "[SKR] ERROR %s:%d:%s: ", file, line, func);
+	unsigned long written = (unsigned long)snprintf(
+	        SKR_LAST_ERROR, SKR_LAST_ERROR_SIZE,
+	        "[SKR] ERROR %s:%d:%s: ", file, line, func);
 
 	if (written < 0 || written >= SKR_LAST_ERROR_SIZE)
 		written = 0;
@@ -488,7 +557,7 @@ static inline void m_skr_last_error_set_with_meta(const char* file, int line,
  * @usage
  * m_skr_last_error_clear();
  */
-static inline void m_skr_last_error_clear() { SKR_LAST_ERROR[0] = '\0'; }
+static inline void m_skr_last_error_clear(void) { SKR_LAST_ERROR[0] = '\0'; }
 
 /**
  * @internal
@@ -545,14 +614,14 @@ static inline char* m_skr_read_file(const char* path) {
 	long len = ftell(file);
 	rewind(file);
 
-	char* buffer = (char*)malloc(len + 1);
+	char* buffer = (char*)malloc((unsigned long)len + 1);
 	if (!buffer) {
 		fclose(file);
 		m_skr_last_error_set("failed to open");
 		return NULL;
 	}
 
-	fread(buffer, 1, len, file);
+	fread(buffer, 1, (unsigned long)len, file);
 	buffer[len] = '\0';
 	fclose(file);
 
@@ -586,6 +655,7 @@ static inline void m_skr_gl_framebuffer_size_callback(const int width,
 static inline void m_skr_gl_glfw_framebuffer_size_callback(GLFWwindow* window,
                                                            const int   width,
                                                            const int   height) {
+	(void)window;
 	m_skr_gl_framebuffer_size_callback(width, height);
 	m_skr_last_error_clear();
 }
@@ -624,6 +694,7 @@ static inline int m_skr_gl_glfw_init(SkrWindow* w) {
 
 	glfwSetFramebufferSizeCallback(w->Backend.Handler.GLFW,
 	                               m_skr_gl_glfw_framebuffer_size_callback);
+
 	glfwMakeContextCurrent(w->Backend.Handler.GLFW);
 
 	m_skr_last_error_clear();
@@ -775,12 +846,14 @@ static inline GLuint m_skr_gl_create_program(const GLuint* shaders,
  * @return Program ID, or 0 on failure.
  */
 static inline GLuint
-m_skr_gl_create_program_from_shaders(const SkrShader* shaders_input,
-                                     const size_t     count) {
-	if (!shaders_input || count == 0) {
+m_skr_gl_create_program_from_shaders(const SkrShader* shader_array,
+                                     const size_t     size) {
+	if (!shader_array || size == 0) {
 		m_skr_last_error_set("either shaders_input != 1 or count == 0");
 		return 0;
 	}
+
+	const size_t count = size / sizeof(SkrShader);
 
 	GLuint* shaders = (GLuint*)malloc(sizeof(GLuint) * count);
 	if (!shaders) {
@@ -789,11 +862,11 @@ m_skr_gl_create_program_from_shaders(const SkrShader* shaders_input,
 	}
 
 	for (size_t i = 0; i < count; ++i) {
-		const SkrShader* s = &shaders_input[i];
+		const SkrShader* s = &shader_array[i];
 		GLuint           shader = 0;
 
-		if (s->Source) {
-			shader = m_skr_gl_create_shader(s->Type, s->Source);
+		if (s->GLSL) {
+			shader = m_skr_gl_create_shader(s->Type, s->GLSL);
 		} else if (s->Path) {
 			shader = m_skr_gl_create_shader_from_file(s->Type,
 			                                          s->Path);
@@ -831,23 +904,14 @@ m_skr_gl_create_program_from_shaders(const SkrShader* shaders_input,
 
 /**
  * @internal
- * @brief GL use an OpenGL shader program.
- */
-static inline void m_skr_gl_shader_use(const GLuint program) {
-	glUseProgram(program);
-	m_skr_last_error_clear();
-}
-
-/**
- * @internal
  * @brief GL destroy an OpenGL shader program.
  *
  * @param program Pointer to program ID. Resets to 0 on success.
  */
-static inline void m_skr_gl_shader_destroy(GLuint* program) {
-	if (program && *program) {
-		glDeleteProgram(*program);
-		*program = 0;
+static inline void m_skr_gl_shader_destroy(GLuint program) {
+	if (program) {
+		glDeleteProgram(program);
+		program = 0;
 		m_skr_last_error_clear();
 	}
 }
@@ -916,25 +980,9 @@ static inline void m_skr_gl_shader_set_mat4(const GLuint program,
 	m_skr_last_error_clear();
 }
 
-static inline void m_skr_gl_renderer_init() {}
+static inline void m_skr_gl_renderer_render(SkrState* s) {
 
-/**
- * @internal
- * @brief GL clear screen (color + depth).
- */
-static inline void m_skr_gl_renderer_render(void) {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-}
-
-/**
- * @internal
- * @brief GL free VAO/VBO/EBO of a mesh.
- *
- * Usually called at shutdown, not per-frame.
- */
-static inline void m_skr_gl_renderer_finalize(SkrState* s) {
-	if (!s)
-		return;
 
 	for (unsigned int i = 0; i < s->ModelCount; ++i) {
 		SkrModel* model = &s->Models[i];
@@ -944,6 +992,52 @@ static inline void m_skr_gl_renderer_finalize(SkrState* s) {
 		for (unsigned int j = 0; j < model->MeshCount; ++j) {
 			SkrMesh* mesh = &model->Meshes[j];
 
+			if (mesh->VAO == 0 || mesh->VertexCount == 0)
+				continue;
+
+			glUseProgram(mesh->Program->Backend.GL.ID);
+			glBindVertexArray(mesh->VAO);
+
+			if (model->Textures && model->TextureCount > 0) {
+				for (unsigned int t = 0;
+				     t < model->TextureCount; ++t) {
+					glActiveTexture(GL_TEXTURE0 + t);
+					glBindTexture(GL_TEXTURE_2D,
+					              model->Textures[t]
+					                      .Backend.GL.ID);
+				}
+			}
+
+			if (mesh->IndexCount > 0) {
+				glDrawElements(GL_TRIANGLES, mesh->IndexCount,
+				               GL_UNSIGNED_INT, 0);
+			} else {
+				glDrawArrays(GL_TRIANGLES, 0,
+				             mesh->VertexCount);
+			}
+		}
+	}
+}
+
+static inline void m_skr_gl_renderer_finalize(SkrState* s) {
+	if (!s)
+		return;
+
+	for (unsigned int i = 0; i < s->ModelCount; ++i) {
+		SkrModel* model = &s->Models[i];
+
+		if (model->Textures && model->TextureCount > 0) {
+			for (unsigned int t = 0; t < model->TextureCount; ++t) {
+				glDeleteTextures(
+				        1, &model->Textures[t].Backend.GL.ID);
+			}
+		}
+
+		if (!model->Meshes)
+			continue;
+
+		for (unsigned int j = 0; j < model->MeshCount; ++j) {
+			SkrMesh* mesh = &model->Meshes[j];
 			if (mesh->VAO)
 				glDeleteVertexArrays(1, &mesh->VAO);
 			if (mesh->VBO)
@@ -954,14 +1048,38 @@ static inline void m_skr_gl_renderer_finalize(SkrState* s) {
 			mesh->VAO = mesh->VBO = mesh->EBO = 0;
 		}
 	}
+
+	glBindVertexArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+	glUseProgram(0);
+}
+
+static inline void m_skr_renderer_finalize(SkrState* s) {
+	if (s->Backend.GL) {
+		m_skr_gl_renderer_finalize(s);
+
+		if (s->Window->Backend.Type == SKR_BACKEND_WINDOW_GLFW) {
+			glfwTerminate();
+		}
+	}
+
+	s->Models = NULL;
+	s->ModelCount = 0;
+	s->Window = NULL;
 }
 
 /**
  * @internal
  * @brief GLFW check if a GLFW window should close.
  */
-static inline int m_skr_gl_glfw_should_close(SkrWindow* w) {
-	return glfwWindowShouldClose(w->Backend.Handler.GLFW);
+static inline int m_skr_gl_glfw_should_close(SkrState* s) {
+	if (glfwWindowShouldClose(s->Window->Backend.Handler.GLFW)) {
+		m_skr_renderer_finalize(s);
+		return 1;
+	}
+
+	return 0;
 }
 
 /**
@@ -975,24 +1093,14 @@ static inline void m_skr_gl_glfw_renderer_render(SkrState* s) {
 		s->Window->InputHandler(s->Window);
 	}
 
-	glfwPollEvents();
-
 	glfwGetFramebufferSize(s->Window->Backend.Handler.GLFW,
 	                       &s->Window->Width, &s->Window->Height);
 
-	m_skr_gl_renderer_render();
+	m_skr_gl_renderer_render(s);
 
 	glfwSwapBuffers(s->Window->Backend.Handler.GLFW);
-}
 
-/**
- * @internal
- * @brief GLFW Shutdown OpenGL renderer and GLFW.
- */
-static inline void m_skr_gl_glfw_renderer_finalize(SkrState* s) {
-	m_skr_gl_renderer_finalize(s);
-
-	glfwTerminate();
+	glfwPollEvents();
 }
 
 /**
@@ -1031,7 +1139,7 @@ static inline int m_skr_gl_load_texture_2d_from_path(const char*   path,
 	else if (nrChannels == 4)
 		format = GL_RGBA;
 
-	glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format,
+	glTexImage2D(GL_TEXTURE_2D, 0, (GLint)format, width, height, 0, format,
 	             GL_UNSIGNED_BYTE, data);
 	glGenerateMipmap(GL_TEXTURE_2D);
 
@@ -1071,10 +1179,12 @@ static inline void m_skr_free_textures_2d(unsigned int* textures,
 	}
 }
 
-static inline int SkrWindowInit(SkrWindow* w) {
-	if (SKR_BACKEND_API == SKR_BACKEND_API_GL) {
-		if (SKR_BACKEND_WINDOW == SKR_BACKEND_WINDOW_GLFW) {
-			if (!m_skr_gl_glfw_init(w)) {
+static inline int m_skr_window_init(SkrState* s, int backend) {
+	if (SKR_BACKEND_WINDOW == SKR_BACKEND_WINDOW_GLFW) {
+		if (backend == SKR_BACKEND_API_GL) {
+			s->Backend.GL = true;
+
+			if (!m_skr_gl_glfw_init(s->Window)) {
 				return 0;
 			}
 		}
@@ -1083,38 +1193,260 @@ static inline int SkrWindowInit(SkrWindow* w) {
 	return 1;
 }
 
-static inline SkrState SkrInit(SkrWindow* w) {
+static inline SkrState SkrInit(SkrWindow* w, int backend) {
 	SkrState s = {0};
+	s.Window = w;
 
-	if (!SkrWindowInit(w))
+	if (!m_skr_window_init(&s, backend))
 		return (SkrState){0};
 
-	s.Window = w;
 	return s;
 }
 
-static inline int SkrWindowShouldClose(SkrWindow* w) {
+static inline int SkrShouldClose(SkrState* s) {
 	if (SKR_BACKEND_WINDOW == SKR_BACKEND_WINDOW_GLFW) {
-		return m_skr_gl_glfw_should_close(w);
+		return m_skr_gl_glfw_should_close(s);
 	}
 
 	return 0;
 }
 
+static inline void m_skr_gl_mesh_init(SkrMesh* m) {
+	if (!m) {
+		m_skr_last_error_set("missing vertices or size");
+		return;
+	}
+
+	glGenVertexArrays(1, &m->VAO);
+	glGenBuffers(1, &m->VBO);
+	glGenBuffers(1, &m->EBO);
+
+	glBindVertexArray(m->VAO);
+
+	glBindBuffer(GL_ARRAY_BUFFER, m->VBO);
+	glBufferData(GL_ARRAY_BUFFER, m->VertexCount * sizeof(SkrVertex),
+	             m->Vertices, GL_STATIC_DRAW);
+	glEnableVertexAttribArray(0);
+
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m->EBO);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+	             m->IndexCount * sizeof(unsigned int), m->Indices,
+	             GL_STATIC_DRAW);
+
+	// position
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(SkrVertex),
+	                      (void*)offsetof(SkrVertex, Position));
+
+	// normal
+	glEnableVertexAttribArray(1);
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(SkrVertex),
+	                      (void*)offsetof(SkrVertex, Normal));
+
+	// uv
+	glEnableVertexAttribArray(2);
+	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(SkrVertex),
+	                      (void*)offsetof(SkrVertex, UV));
+
+	// color
+	glEnableVertexAttribArray(3);
+	glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(SkrVertex),
+	                      (void*)offsetof(SkrVertex, Color));
+
+	// tangent
+	glEnableVertexAttribArray(4);
+	glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(SkrVertex),
+	                      (void*)offsetof(SkrVertex, Tangent));
+
+	// bitangent
+	glEnableVertexAttribArray(5);
+	glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, sizeof(SkrVertex),
+	                      (void*)offsetof(SkrVertex, Bitangent));
+
+	// glBindVertexArray(0);
+	// glUseProgram(m->Program->Backend.GL.ID);
+
+	m_skr_last_error_clear();
+}
+
+static inline void m_skr_gl_renderer_init(SkrState* s) {
+	glEnable(GL_DEPTH_TEST);
+
+	for (int i = 0; i < s->ModelCount; i++) {
+		SkrModel* model = &s->Models[i];
+		for (int j = 0; j < model->MeshCount; j++) {
+			SkrMesh* mesh = &model->Meshes[j];
+			m_skr_gl_mesh_init(mesh);
+		}
+	}
+}
+
+static inline void m_skr_renderer_init(SkrState* s) {
+	if (!s)
+		return;
+
+	if (s->Backend.GL)
+		m_skr_gl_renderer_init(s);
+}
+
 static inline void SkrRendererRender(SkrState* s) {
-	if (SKR_BACKEND_API == SKR_BACKEND_API_GL) {
-		if (SKR_BACKEND_WINDOW == SKR_BACKEND_WINDOW_GLFW) {
+	if (!s || !s->Window)
+		return;
+
+	if (!m_skr_renderer_initialized) {
+		m_skr_gl_renderer_init(s);
+		m_skr_renderer_initialized = true;
+	}
+
+	if (SKR_BACKEND_WINDOW == SKR_BACKEND_WINDOW_GLFW) {
+		if (s->Backend.GL) {
 			m_skr_gl_glfw_renderer_render(s);
 		}
 	}
 }
 
-static inline void SkrFinalize(SkrState* s) {
-	if (SKR_BACKEND_API == SKR_BACKEND_API_GL) {
-		if (SKR_BACKEND_WINDOW == SKR_BACKEND_WINDOW_GLFW) {
-			m_skr_gl_glfw_renderer_finalize(s);
-		}
+static inline void m_skr_gl_triangle(SkrState* s) {
+	static const char* triangle_vert =
+	        "#version 330 core\n"
+	        "layout (location = 0) in vec3 aPos;\n"
+	        "layout (location = 1) in vec3 aColor;\n"
+	        "out vec3 ourColor;\n"
+	        "void main() {\n"
+	        "  gl_Position = vec4(aPos, 1.0);\n"
+	        "  ourColor = aColor;\n"
+	        "}\n";
+
+	static const char* triangle_frag =
+	        "#version 330 core\n"
+	        "out vec4 FragColor;\n"
+	        "in vec3 ourColor;\n"
+	        "void main() {\n"
+	        "  FragColor = vec4(ourColor, 1.0f);\n"
+	        "}\n";
+
+	SkrShader shaders[] = {
+	        {GL_VERTEX_SHADER, triangle_vert, NULL},
+	        {GL_FRAGMENT_SHADER, triangle_frag, NULL},
+	};
+
+	GLuint prog =
+	        m_skr_gl_create_program_from_shaders(shaders, sizeof(shaders));
+
+	static const SkrVertex vertices[] = {
+	        {.Position = {0.5f, -0.5f, 0.0f}, .Color = {1.0f, 0.0f, 0.0f}},
+	        {.Position = {-0.5f, -0.5f, 0.0f}, .Color = {0.0f, 1.0f, 0.0f}},
+	        {.Position = {0.0f, 0.5f, 0.0f}, .Color = {0.0f, 0.0f, 1.0f}},
+	};
+
+	static SkrMesh mesh = {
+	        .Vertices = (SkrVertex*)vertices,
+	        .VertexCount = 3,
+	        .Program = NULL,
+	};
+
+	static SkrShaderProgram program = {.Backend.GL.ID = 0};
+	program.Backend.GL.ID = prog;
+	mesh.Program = &program;
+
+	static SkrModel model = {
+	        .Meshes = &mesh,
+	        .MeshCount = 1,
+	};
+
+	s->Models = &model;
+	s->ModelCount = 1;
+}
+
+static inline void SkrTriangle(SkrState* s) {
+	if (s->Backend.GL) {
+		m_skr_gl_triangle(s);
 	}
+}
+
+static inline void SkrCaptureCursor(SkrState* s) {
+	if (s->Window->Backend.Type == SKR_BACKEND_WINDOW_GLFW) {
+		glfwSetInputMode(s->Window->Backend.Handler.GLFW, GLFW_CURSOR,
+		                 GLFW_CURSOR_DISABLED);
+	}
+}
+
+/**
+ * @brief Append vertices to an existing mesh.
+ *
+ * @param mesh Pointer to the mesh to modify.
+ * @param vertices Pointer to the vertex array to append.
+ * @param count Number of vertices to append.
+ * @return int 0 on success, nonzero on allocation failure.
+ */
+static inline int m_skr_mesh_append_vertices(SkrMesh*         mesh,
+                                             const SkrVertex* vertices,
+                                             const int        count) {
+	if (!mesh || !vertices || count <= 0)
+		return 0;
+
+	int        new_count = mesh->VertexCount + count;
+	SkrVertex* new_vertices =
+	        realloc(mesh->Vertices, new_count * sizeof(SkrVertex));
+	if (!new_vertices) {
+		m_skr_last_error_set("failed to realloc mesh vertices");
+		return 0;
+	}
+
+	memcpy(new_vertices + mesh->VertexCount, vertices,
+	       count * sizeof(SkrVertex));
+
+	mesh->Vertices = new_vertices;
+	mesh->VertexCount = new_count;
+	return 1;
+}
+
+/**
+ * @brief Append a mesh to an existing model.
+ *
+ * @param model Pointer to the model to modify.
+ * @param mesh Pointer to the mesh to append (copied by value).
+ * @return int 0 on success, nonzero on allocation failure.
+ */
+static inline int skr_model_append_mesh(SkrModel* model, const SkrMesh* mesh) {
+	if (!model || !mesh)
+		return 0;
+
+	SkrMesh* new_meshes = realloc(model->Meshes,
+	                              (model->MeshCount + 1) * sizeof(SkrMesh));
+	if (!new_meshes) {
+		m_skr_last_error_set("failed to realloc model meshes");
+		return 0;
+	}
+
+	new_meshes[model->MeshCount] = *mesh; // shallow copy (VAO, VBO, etc.)
+	model->Meshes = new_meshes;
+	model->MeshCount += 1;
+	return 1;
+}
+
+/**
+ * @brief Append a model to the global rendering state.
+ *
+ * @param state Pointer to the engine state.
+ * @param model Pointer to the model to append (copied by value).
+ * @return int 0 on success, nonzero on allocation failure.
+ */
+static inline int skr_state_append_model(SkrState*       state,
+                                         const SkrModel* model) {
+	if (!state || !model)
+		return -1;
+
+	SkrModel* new_models = realloc(state->Models, (state->ModelCount + 1) *
+	                                                      sizeof(SkrModel));
+	if (!new_models) {
+		m_skr_last_error_set("failed to realloc state models");
+		return 0;
+	}
+
+	new_models[state->ModelCount] = *model;
+	state->Models = new_models;
+	state->ModelCount += 1;
+	return 1;
 }
 
 #ifdef __cplusplus
